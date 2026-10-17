@@ -69,9 +69,12 @@ cp .config "$out/config"
 echo "$krel" > "$out/kernel.release"
 
 # The X710 drivers must be present, built in or as modules.
+# grep -c reads the whole stream: grep -q would exit early, SIGPIPE zcat and,
+# under pipefail, report a present driver as missing.
 for drv in ana38407 fts1ba90a wez01 sm5714; do
-	if ! zcat "$out/Image.gz" | grep -aq "$drv" && \
-	   ! find "$out/modules-root" -name "*${drv}*.ko*" | grep -q .; then
+	in_image=$(zcat "$out/Image.gz" | grep -ac "$drv" || true)
+	as_module=$(find "$out/modules-root" -name "*${drv}*.ko*" | wc -l)
+	if [ "${in_image:-0}" -eq 0 ] && [ "$as_module" -eq 0 ]; then
 		echo "driver $drv is missing from the build" >&2
 		exit 1
 	fi
