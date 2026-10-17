@@ -65,19 +65,29 @@ first install), verifies them against `SHA256SUMS`, and reboots.
 The kernel reboots 10 s after a panic, and ABL will keep booting the Ubuntu set.
 Your Android data is safe; you only need to put the Android boot set back.
 
-1. **Recovery (preferred).** Hold *Volume Up + Power* to enter the recovery
-   partition (it is never touched by this port). If the recovery offers an
-   `adb` root shell, restore from the backup you pushed earlier:
+1. **Recovery → fastbootd (preferred).** Hold *Volume Up + Power* to enter the
+   recovery partition (never touched by this port; LineageOS recovery on the
+   reference tablet), choose *Advanced → Enter fastboot*, then from the PC:
+   ```sh
+   fastboot devices                     # must show the tablet in fastbootd
+   for p in boot init_boot vendor_boot dtbo; do fastboot flash $p $p.img; done
+   fastboot reboot
+   ```
+2. **Recovery → adb shell.** If the recovery offers a root `adb` shell
+   (*Advanced → Enable ADB*):
    ```sh
    adb push boot.img init_boot.img vendor_boot.img dtbo.img /tmp/
    adb shell 'for p in boot init_boot vendor_boot dtbo; do dd if=/tmp/$p.img of=/dev/block/by-name/$p bs=4M; done; sync'
    adb reboot
    ```
-2. **Download mode + Odin.** Hold *Volume Down + Power* (with USB connected)
-   to enter Download mode and flash your backed-up Android boot set as an AP
-   tar (`boot.img`, `init_boot.img`, `vendor_boot.img`, `dtbo.img`).
+3. **Download mode + Odin (last resort).** Hold *Volume Down + Power* with USB
+   connected and flash the Android boot set as an AP `.tar.md5`. Samsung's
+   bootloader may reject images that are not Samsung-signed (custom ROM, Magisk),
+   so do not rely on this path alone.
 
-Test path 1 **before** the first Ubuntu install, while Android still works.
+Test path 1 **before** the first Ubuntu install, while Android still works:
+boot into recovery, enter fastbootd, check `fastboot devices`, then
+`fastboot reboot` without flashing anything.
 
 ## Backups to take before the first install
 
