@@ -52,7 +52,11 @@ mkdir -p "$mnt/boot"
 mount "${loop}p1" "$mnt/boot"
 
 echo "== copying rootfs"
-rsync -aHAX --numeric-ids "$rootfs/" "$mnt/"
+# Only versioned trees belong in /usr/lib/modules; skip anything a broken
+# earlier build may have copied to its top level.
+rsync -aHAX --numeric-ids \
+	--exclude='/usr/lib/modules/kernel' --exclude='/usr/lib/modules/modules.*' \
+	"$rootfs/" "$mnt/"
 
 for f in etc/fstab boot/dtbs/sm8550-samsung-gts9wifi.dtb; do
 	test -e "$mnt/$f" || { echo "missing in image: $f" >&2; exit 1; }

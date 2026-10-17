@@ -53,13 +53,42 @@ add_hash_footer() {
 cmdline=$(tr '\n' ' ' < "$cfg/cmdline.txt" | sed 's/[[:space:]]*$//')
 grep -q 'root=LABEL=GTS9W_ROOT' <<<"$cmdline" || { echo 'cmdline has no GTS9W_ROOT root' >&2; exit 1; }
 
-# The initramfs must reach ABL as an LZ4 legacy stream.
-case $(head -c4 "$initramfs" | od -An -tx1 | tr -d ' \n') in
-	02214c18) cp "$initramfs" "$tmp/initramfs.lz4" ;;
-	1f8b*) gzip -dc "$initramfs" | lz4 -l -12 - "$tmp/initramfs.lz4" >/dev/null ;;
-	*)  # initramfs-tools may emit a modern LZ4 frame; normalise it.
-		lz4 -dc "$initramfs" | lz4 -l -12 - "$tmp/initramfs.lz4" >/dev/null ;;
-esac
+# The initramfs must reach ABL as a single LZ4 legacy stream.  Ubuntu's
+# initramfs-tools writes an uncompressed early cpio (firmware) followed by the
+# compressed main archive; flatten both into one cpio sequence (the kernel
+# unpacks concatenated archives) and compress that once.
+python3 -I - "$initramfs" "$tmp/initramfs.cpio" <<'PY'
+import subprocess, sys
+src, dst = sys.argv[1:]
+d = open(src, 'rb').read()
+out = open(dst, 'wb')
+off = 0
+while d[off:off + 6] == b'070701':              # uncompressed newc segments
+    start = off
+    while True:
+        namesize = int(d[off + 94:off + 102], 16)
+        filesize = int(d[off + 54:off + 62], 16)
+        name = d[off + 110:off + 110 + namesize - 1]
+        off = (off + 110 + namesize + 3) & ~3
+        off = (off + filesize + 3) & ~3
+        if name == b'TRAILER!!!':
+            break
+    out.write(d[start:off])
+    while off < len(d) and d[off] == 0:
+        off += 1
+rest = d[off:]
+if rest:
+    magic = rest[:4].hex()
+    tool = {'02214c18': ['lz4', '-dc'], '04224d18': ['lz4', '-dc'],
+            '28b52ffd': ['zstd', '-dc'], 'fd377a58': ['xz', '-dc']}.get(magic)
+    if tool is None and rest[:2] == b'\x1f\x8b':
+        tool = ['gzip', '-dc']
+    if tool is None:
+        sys.exit(f'unknown initramfs segment magic {magic}')
+    out.write(subprocess.run(tool, input=rest, stdout=subprocess.PIPE, check=True).stdout)
+out.close()
+PY
+lz4 -l -12 "$tmp/initramfs.cpio" "$tmp/initramfs.lz4" >/dev/null
 [ "$(head -c4 "$tmp/initramfs.lz4" | od -An -tx1 | tr -d ' \n')" = 02214c18 ] || {
 	echo 'could not produce an LZ4 legacy initramfs' >&2; exit 1; }
 
@@ -71,8 +100,9 @@ add_hash_footer "$out/boot.img" boot "$boot_size"
 
 echo "== init_boot.img (empty generic ramdisk)"
 mkdir -p "$tmp/empty"
+chmod 0755 "$tmp/empty"
 touch -d '@0' "$tmp/empty"
-(cd "$tmp/empty" && find . -print0 | cpio --reproducible --null -o --format=newc 2>/dev/null) \
+(cd "$tmp/empty" && find . -print0 | cpio --reproducible --owner=0:0 --null -o --format=newc 2>/dev/null) \
 	| lz4 -l -12 - "$tmp/empty.lz4" >/dev/null
 python3 "$tools/mkbootimg.py" --ramdisk "$tmp/empty.lz4" --header_version 4 -o "$out/init_boot.img"
 add_hash_footer "$out/init_boot.img" init_boot "$init_boot_size"
