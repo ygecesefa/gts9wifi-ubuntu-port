@@ -53,7 +53,7 @@ apparmor,apparmor-utils,
 snapd,squashfs-tools,
 netplan.io,network-manager,wpasupplicant,
 openssh-server,avahi-daemon,
-protection-domain-mapper,qrtr-tools,rmtfs,
+protection-domain-mapper,qrtr-tools,rmtfs,linux-firmware,
 iputils-ping,curl,wget,ca-certificates,
 nano,less,htop,rsync,unzip,acl,python3,
 usbutils,pciutils,ethtool,evtest,i2c-tools,v4l-utils,
@@ -140,6 +140,24 @@ mmdebstrap --mode=root --variant=apt --arch=arm64 \
 	"deb $mirror $suite main restricted universe multiverse" \
 	"deb $mirror $suite-updates main restricted universe multiverse" \
 	"deb $mirror $suite-security main restricted universe multiverse"
+fi
+
+# Generic firmware under the device payload, as the Fedora port does.  Rootfs
+# trees bootstrapped before linux-firmware was in the package set get it here.
+if ! chroot "$rootfs" dpkg -s linux-firmware >/dev/null 2>&1; then
+	echo "== installing linux-firmware into the existing rootfs"
+	for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
+	saved=0
+	if [ -e "$rootfs/etc/resolv.conf" ] || [ -L "$rootfs/etc/resolv.conf" ]; then
+		mv "$rootfs/etc/resolv.conf" "$rootfs/etc/resolv.conf.gts9wifi-build"; saved=1
+	fi
+	cp -L /etc/resolv.conf "$rootfs/etc/resolv.conf"
+	chroot "$rootfs" apt-get -o APT::Sandbox::User=root update -qq
+	chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends linux-firmware
+	chroot "$rootfs" apt-get clean
+	rm -f "$rootfs/etc/resolv.conf"
+	[ "$saved" = 0 ] || mv "$rootfs/etc/resolv.conf.gts9wifi-build" "$rootfs/etc/resolv.conf"
+	for d in dev sys proc; do umount "$rootfs/$d"; done
 fi
 
 echo "== 2/6 kernel modules ($krel) and device firmware"
