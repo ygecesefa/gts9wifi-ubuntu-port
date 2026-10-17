@@ -1,180 +1,118 @@
-# Ubuntu 24.04 LTS for Samsung Galaxy Tab S9 Ultra Wi-Fi
+# Ubuntu 24.04 for the Samsung Galaxy Tab S9 Wi-Fi (SM-X710, `gts9wifi`)
 
-<img width="4000" height="2252" alt="20260911_124542" src="https://github.com/user-attachments/assets/80a44675-d588-43b5-b86d-514cd7875800" />
+> **Alpha.** This is an open, step-by-step port. Everything here is a
+> reproducible recipe: every image published in Releases can be rebuilt from
+> this repository with the commands in [BUILDING.md](docs/gts9wifi/BUILDING.md).
 
-Ubuntu 24.04 LTS arm64 for the Samsung Galaxy Tab S9 Ultra Wi-Fi
-(`SM-X910`, `gts9uwifi`), running GNOME 46 on Wayland and upstream Linux
-7.2-rc3.
+Ubuntu 24.04 LTS (GNOME, Wayland) booting from a **microSD card** next to
+Android, on the Galaxy Tab S9 Wi-Fi (Snapdragon 8 Gen 2 / SM8550).
+Android stays on the internal storage untouched; switching between the two
+systems only rewrites four boot partitions, which are backed up first.
 
-## Hardware compatibility
+| | |
+|---|---|
+| Device | Samsung Galaxy Tab S9 Wi-Fi, SM-X710, codename `gts9wifi` |
+| SoC | Qualcomm SM8550 (Snapdragon 8 Gen 2), Adreno 740 |
+| Kernel | mainline Linux 7.2 + gts9wifi patches and drivers |
+| Userspace | Ubuntu 24.04 LTS (noble), GNOME on Wayland |
+| Root filesystem | microSD (`GTS9W_ROOT`), Android untouched on UFS |
+| Status | `v0.2.0-alpha1` — see [hardware status](#hardware-status) |
 
-| Component | Status | Summary |
-|---|---:|---|
-| Display | ✅ | Native 2960×1848 at 120 Hz |
-| Desktop | ✅ | GNOME 46, Wayland and GDM |
-| GPU | ✅ | Adreno 740 hardware acceleration, up to 719 MHz |
-| Touchscreen | ✅ | Goodix multitouch |
-| S Pen writing | ✅ | Hover, pressure, tilt, side button and palm rejection |
-| S Pen dock | ✅ | Insertion, orientation and charging |
-| S Pen BLE | ✅ | Pairing, battery, air gestures and pointer mode |
-| Tab Companion | ✅ | Device settings, fingerprint, dual boot and system updates |
-| Keyboard cover | ✅ | EF-DX920 tested |
-| Cover switch | ✅ | Suspend on close and wake on open |
-| Power and volume buttons | ✅ | Power, wake and volume controls |
-| Wi-Fi | ✅ | WCN7850 / ath12k |
-| Bluetooth | ✅ | Controller, audio and S Pen BLE |
-| Speakers and microphones | ✅ | All four speakers and microphones work fine |
-| Vibration / haptics | ✅ | On-screen keyboard feedback |
-| Motion sensors | ✅ | Rotation, accelerometer, gyroscope and compass |
-| Battery telemetry | ✅ | Charge, voltage, current and temperature |
-| USB-PD/PPS charging | ✅ | Up to 25 W measured into the battery |
-| Suspend / resume | ✅ | Deep sleep and reliable storage recovery |
-| microSD | ✅ | Read and write storage works normally |
-| USB host | ✅ | HID and storage, powered or unpowered |
-| USB-C DisplayPort | ✅ | External video output |
-| Cameras and flash | ✅ | Four cameras, full field of view, autofocus and flash |
-| Fingerprint reader | ✅ | Login, enrolment and recognition |
-| Ambient light sensor | ✅ | Automatic screen brightness |
-| NPU | ✅ | Hardware acceleration support |
-| Virtual machines | 🟡 | Gunyah host support; guest VMs still in development |
-| Waydroid | ✅ | Android with Google Play, GPU acceleration and Internet |
+## Where this comes from
 
-✅ working on the physical tablet · 🟡 experimental or partially validated ·
-❌ unavailable · ❓ not tested
+This port stands on two existing projects and would not exist without them:
 
-The evidence and technical limitations for every component are documented in
-[hardware-status.md](docs/hardware-status.md).
+- **[agcarbajo/ubuntu-galaxy-tab-s9-ultra](https://github.com/agcarbajo/ubuntu-galaxy-tab-s9-ultra)**
+  (MIT) — Ubuntu port for the S9 Ultra (SM-X910). This repository is a fork of
+  it: the Ubuntu build tooling, the SM8550 SoC work and the patched userspace
+  (libcamera autofocus, sensors, mutter) come from there.
+- **[nacht20-de/gts9wifi-fedora-linux](https://github.com/nacht20-de/gts9wifi-fedora-linux)**
+  (MIT) — Fedora port for *this* tablet. The kernel recipe (patches, X710
+  drivers, device tree) and the X710 device services come from there.
 
-This table describes the current source tree; previously published installation
-ZIPs may not include the latest changes.
+Also used: [rainbowdashh/android_device_samsung_gts9wifi](https://github.com/rainbowdashh/android_device_samsung_gts9wifi)
+(TWRP device tree, partition map).
 
-## Tab Companion
-<img width="2164" height="1764" alt="Screenshot from 2026-08-20 04-02-55" src="https://github.com/user-attachments/assets/df7cddca-46e8-438a-bcb8-be713cc93bed" />
+The S9 Ultra and the S9 share the SoC but not the board. What this port changes:
 
-Tab Companion provides:
+| S9 Ultra (SM-X910) | S9 Wi-Fi (SM-X710), this port |
+|---|---|
+| board-id `0x10008 0x03`, `gts9uwifi` DTS | board-id `0x10008 0x04`, `gts9wifi` DTS |
+| WCN7850 Wi-Fi 7 / `ath12k` | WCN6855 Wi-Fi 6E / `ath11k` |
+| Goodix touchscreen | ST FTS1BA90A touchscreen |
+| Wacom W90xx S Pen | Wacom WEZ01 S Pen |
+| ANA38407 AMSA46AS02 panel (2960×1848) | ANA38407 AMSA10FA01 panel (2560×1600) |
+| four cameras | two cameras (HI1337 rear + DW9808 lens, HI1337 front) |
 
-- full S Pen settings (pairing, gestures and air-pointer mouse mode);
-- remapping for compatible Samsung Book Cover Keyboard keys;
-- adjustable vibration feedback for GNOME's on-screen keyboard and optional notification vibration;
-- fingerprint enrolment with progress, deletion and recognition tests, using the same fingerprints as Ubuntu Settings and login;
-- dual boot to Android, with an optional toggle in quick settings;
-- updater for future builds of the port directly from the app.
+## Hardware status
 
-The air-pointer concept is inspired by
-[PenMouse S](https://github.com/jojczak/PenMouseS) by Jakub J (`@jojczak`).
-Tab Companion uses an independent native Linux implementation.
+Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet ·
+🟡 partial · ❌ not working · — not started
 
-## Installation
+| Area | v0.2.0-alpha1 | Notes |
+|---|---|---|
+| Boot from microSD | 🧪 | layout identical to the Fedora port's validated one |
+| Display (ANA38407) | 🧪 | |
+| Touch (FTS1BA90A) | 🧪 | |
+| Wi-Fi (WCN6855) | 🧪 | kernel pinned to 7.2.0; 7.2.1–7.2.6 break Wi-Fi |
+| Bluetooth | 🧪 | BD address provisioning disabled in alpha1 |
+| GPU (Adreno 740, Freedreno/Turnip) | 🧪 | firmware in the initramfs |
+| Audio (CS35L45) | 🧪 | |
+| Battery / charging (SM5714) | 🧪 | |
+| S Pen | 🧪 | tilt: planned |
+| Rear camera autofocus | — | planned: Ultra port's libcamera autofocus (stage B) |
+| Hardware video decode | — | planned: iris VPU through GStreamer/ffmpeg; Vulkan Video does not exist for Adreno on Linux |
+| Charging bypass UI | — | planned |
+| Rotation sensor | — | planned (stage B: hexagonrpcd, libssc) |
+| Fingerprint | — | |
+| Suspend | — | |
 
-Both ways use the same installation ZIP. The only difference is whether you
-split the UFS first.
-
-> [!WARNING]
-> Either way, **everything Android keeps in `userdata` is erased**: its apps,
-> its settings and its files. Android's system itself is not touched. Back up
-> anything you want to keep first. On another note, the project seems really stable so far, but as always: I'm not responsible for bricked devices, missing recovery partitions, nuclear wars or you getting fired because you forgot to boot back into android for the alarm.
-
-### Before you start
-
-1. **An unlocked bootloader.**
-2. **Root with Magisk** (only if you want dual boot).
-3. Get `ubuntu-24.04-sm-x910-vX.X.X.zip` from the [latest release](https://github.com/agcarbajo/ubuntu-galaxy-tab-s9-ultra/releases/latest). `gts9u-split.zip` and `Dualboot-vX.X.X.apk` only if you want dual boot.
-4. **[TWRP](https://github.com/rainbowdashh/android_device_samsung_gts9u/releases/tag/V2)** and **a `vbmeta` with AVB verification disabled** ([the one published alongside TWRP](https://xdaforums.com/attachments/vbmeta-1-tar.6077784/)). Flash both files in the AP slot using Odin or Heimdall (you will need to reboot again to download mode between flashes).
-5. After flashing both files from step 4 reboot to TWRP. **Don't let One UI boot** or TWRP will be overwritten with the stock recovery and you will need to flash the files again.
-
-### Ubuntu on the whole tablet
-
-1. From TWRP just flash the installation ZIP (`ubuntu-24.04-sm-x910-v1.2.0.zip`) using a microSD, external USB storage or sideload. **Don't flash it from internal storage** as it will get wiped.
-2. Reboot and enjoy!
-
-### Ubuntu beside Android
-
-> [!IMPORTANT]
-> The default split is 50% of the storage for Android and 50% for Linux. If you want to modify it just change the value of `ANDROID-PERCENT` inside `gts9u-split.zip` to the percentage you want Android to keep (between 5% and 95%).
-
-1. Flash `gts9u-split.zip`. It shortens `userdata`, creates `linuxroot`
-   beside it, and recreates Android's data so Android can make fresh encryption
-   keys on its next boot.
-2. Reboot to TWRP (Reboot > Recovery).
-3. Wipe > Format Data.
-4. Flash the installation ZIP (`ubuntu-24.04-sm-x910-v1.2.0.zip`).
-5. Reboot and enjoy! (see below for how to reboot to Android).
-
-### Switching systems
-
-From **Ubuntu**, just use the toggle that you should see on quick settings or from the Tab Companion app under the Dualboot tab.
-
-From **Android**, install the `Dualboot-vX.X.X.apk` app and give it root access, then reboot from the app or add the toggle to quick settings.
-
-Both One UI and LineageOS have been tested in dual boot with Ubuntu and they work fine.
-
-Liked the project? you might want to buy me a coffee, I'll be very grateful!
-
-<a href='https://ko-fi.com/V7W426ZJIP' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
-
-## Updating an existing installation
-
-Starting with v1.1.0, open **Tab Companion → Updates** to update the complete
-port. For v1.0.0 installations without the updater, run:
-
-```sh
-d=$(mktemp -d) && curl -fL https://raw.githubusercontent.com/agcarbajo/ubuntu-galaxy-tab-s9-ultra/main/scripts/update-to-latest.py -o "$d/update.py" && sudo python3 "$d/update.py"
-```
-
-Updates preserve your data and settings. See [system updates](docs/system-updates.md)
-for local ZIP installation, repair and troubleshooting.
-
-If an older updater returns to the desktop still showing **Ready to restart**,
-use the command above to load the current updater. To reinstall your recorded
-build, add `--repair` after `"$d/update.py"`. This preserves your data and settings.
-
-## Known issues
-
-- Regarding the official cover keyboard, as I said, only EF-DX920 cover keyboard has been tested. EF-DX900, EF-DX910, EF-DX915 and
-EF-DX925 are untested as I don't have them, so they might not work.
-- Guest virtual machines remain under development; initial Gunyah host support is included.
-- Sometimes returning from deep suspend might need a hard reset.
+This table is only updated from tests on the real tablet.
 
 ## Documentation
 
-| Document | Contents |
+- [INSTALL.md](docs/gts9wifi/INSTALL.md) — installing on microSD and first boot
+- [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md) — how Android ↔ Ubuntu switching works, and how to recover
+- [BUILDING.md](docs/gts9wifi/BUILDING.md) — building every image from source
+- [KNOWN-ISSUES.md](docs/gts9wifi/KNOWN-ISSUES.md) — open issues and the Fedora port's issues this port targets
+- [PORTING-LOG.md](docs/gts9wifi/PORTING-LOG.md) — what was done, in order, including mistakes
+- Release notes: [RELEASE-NOTES-v0.2.0-alpha1.md](docs/gts9wifi/RELEASE-NOTES-v0.2.0-alpha1.md)
+
+## Safety
+
+This writes to the boot partitions of your tablet. Read [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md)
+before installing. In particular:
+
+- never write anything to `/dev/block/sda` or any other whole UFS disk — on this
+  tablet `sda` is the internal storage, **the microSD card is `/dev/block/mmcblk1`**
+- the install never writes `vbmeta`, the bootloader, `efs`, `modem` or `persist`
+- back up `boot`, `init_boot`, `vendor_boot`, `dtbo` (and `efs`, `sec_efs`,
+  `modem`) before the first switch
+
+No warranty. You can lose data or need to reflash your tablet.
+
+## Layout of the gts9wifi port
+
+The gts9wifi-specific parts live next to the inherited S9 Ultra tooling:
+
+| Path | Contents |
 |---|---|
-| [Boot strategy](docs/boot-strategy.md) | Requirements, partitions, the boot chain and recovery |
-| [Dual boot](docs/dual-boot.md) | How switching systems works, and what it never touches |
-| [Hardware status](docs/hardware-status.md) | Evidence, limitations and pending hardware tests |
-| [Tab Companion](docs/tab-companion.md) | S Pen, keyboard and fingerprint settings, architecture and diagnostics |
-| [System updates](docs/system-updates.md) | GitHub and local ZIP updates, current-build repair and the updater for older installations |
-| [Ubuntu userspace](docs/ubuntu-userspace.md) | Root filesystem and desktop integration |
-| [Fingerprint reader](docs/fingerprint-reader.md) | Working EL721/UDFPS integration, validation evidence and maintenance constraints |
-| [Gunyah virtual machines](docs/gunyah.md) | Host-driver architecture, current validation and tablet test procedure |
-| [Development notes](docs/development-notes.md) | Durable technical conclusions and rejected approaches |
-| [Porting log](docs/porting-log.md) | Chronological engineering history |
+| `scripts/build-gts9wifi-*.sh` | kernel, rootfs, boot bundle and microSD image builders |
+| `kernel/config/config-gts9wifi-ubuntu.fragment` | Ubuntu userspace kernel options |
+| `configs/gts9wifi/` | vendor_boot cmdline and bootconfig |
+| `dualboot/` | `to-ubuntu.sh` (Android side), `ubuntu-to-android` (Ubuntu side) |
+| `docs/gts9wifi/` | this documentation |
 
-## Repository layout
+Everything else is the S9 Ultra port as forked (its original README: [docs/upstream-s9-ultra-README.md](docs/upstream-s9-ultra-README.md)); it is reused or adapted step by step.
 
-```text
-kernel/       Device tree, drivers, patches and kernel configuration
-packaging/    Debian packages installed in the Ubuntu image
-android/      The Dualboot app, which switches systems from the Android side
-configs/      System configuration, service overlays and the TWRP installers
-scripts/      Reproducible build and validation tools
-docs/         Detailed documentation and engineering history
-artifacts/    Generated release files; not versioned
-work/         Scratch space for builds; not versioned
-```
+## License
 
-## Firmware and licensing
+MIT by default, like both upstream projects ([LICENSE](LICENSE)); per-file
+SPDX headers take precedence. Kernel code and patches are GPL-2.0-only, the
+device tree is BSD-3-Clause.
 
-Keep in mind project has been made with the help of agentic AIs (codex and claude code), so some things might not be done in the best possible way.
+Proprietary Samsung/Qualcomm firmware is **not** stored in Git. The build stages
+it from the owner's tablet and checks its sha256 (see [BUILDING.md](docs/gts9wifi/BUILDING.md)).
 
-Proprietary Samsung and Qualcomm firmware is not stored in Git. Build helpers
-stage it from the owner's tablet or official Samsung firmware and verify pinned
-checksums.
-
-The project default license is MIT; per-file SPDX headers take precedence.
-Kernel code and patches remain GPL-2.0-only, and the device tree remains
-BSD-3-Clause. Imported sources are listed in
-[kernel/PROVENANCE.md](kernel/PROVENANCE.md).
-
-Contributions must be reproducible in the repository and validated on physical
-hardware before a component is marked as working.
+This port is developed with the help of AI agents (Hermes, Claude Code). Every
+component is marked working only after it has been tested on the tablet.
