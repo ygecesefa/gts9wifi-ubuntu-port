@@ -24,6 +24,22 @@
 | Browsers / VLC decode video in software | iris VPU via GStreamer/ffmpeg V4L2 for players; Vulkan Video is not implemented by Mesa Turnip on any Linux |
 | Linux 7.2.1–7.2.6 break Wi-Fi | kernel pinned to 7.2.0 |
 
+## Roadmap
+
+1. **v0.2.0-alpha1** — first boot from microSD (stage A rootfs).
+2. **Stage B userspace** — the S9 Ultra port's rebuilt packages adapted to the
+   gts9wifi: libcamera with autofocus, `hexagonrpcd`/`libssc`/`iio-sensor-proxy`
+   (rotation), mutter, gnome-settings-daemon.
+3. **Ultra SoC improvements** — device-independent SM8550 patches, one at a time.
+4. **S Pen tilt, charging bypass, `/vendor`**.
+5. **TWRP** — a working recovery for the gts9wifi (rainbowdashh V2 and the
+   correct flashing procedure), then a **TWRP installer ZIP** that asks where to
+   install, based on the S9 Ultra port's `make-twrp-zip.py`,
+   `build-ufs-image.sh` and `make-repartition-zip.py`:
+   - **microSD** — as today, Android untouched
+   - **internal storage, beside Android** — a `linuxroot` partition carved from `userdata`
+   - **whole tablet** — Ubuntu on the internal storage only
+
 ## Lessons from v0.1.0-alpha1
 
 `v0.1.0-alpha1` (an earlier, AI-driven attempt, never booted) is superseded.

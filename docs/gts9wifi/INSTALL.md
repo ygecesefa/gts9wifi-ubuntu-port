@@ -66,6 +66,19 @@ sh /data/local/tmp/to-ubuntu.sh       # type UBUNTU when asked
 The tablet reboots into Ubuntu. The first boot expands the root partition to
 the whole card and can take a few minutes.
 
+Optional one-tap switch from the Android home screen, with
+[Termux](https://f-droid.org/packages/com.termux/) and
+[Termux:Widget](https://f-droid.org/packages/com.termux.widget/):
+
+```sh
+# inside Termux
+mkdir -p ~/.shortcuts
+printf '#!/data/data/com.termux/files/usr/bin/bash\nsu -c "sh /data/local/tmp/to-ubuntu.sh"\n' > ~/.shortcuts/Ubuntu.sh
+chmod +x ~/.shortcuts/Ubuntu.sh
+```
+
+Add the Termux:Widget widget to the home screen and tap **Ubuntu.sh**.
+
 ## 5. First login
 
 Alpha images ship a test account: user `ubuntu`, password given in the release
