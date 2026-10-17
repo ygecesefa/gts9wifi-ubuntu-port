@@ -1,0 +1,48 @@
+#!/usr/bin/bash
+# Ubuntu -> Android on the Galaxy Tab S9 Wi-Fi (gts9wifi, SM-X710).
+#
+# Adapted from the Fedora gts9wifi port's astroid-to-android.  Restores the
+# Android boot, init_boot, vendor_boot and dtbo images saved before Ubuntu was
+# installed, verifies them, then reboots.  vbmeta is never touched.
+set -Eeuo pipefail
+
+BASE="/usr/share/gts9wifi-dualboot/android"
+PARTS="/dev/disk/by-partlabel"
+
+declare -A EXPECTED=(
+  [boot]=100663296
+  [init_boot]=8388608
+  [vendor_boot]=100663296
+  [dtbo]=16777216
+)
+
+echo "Ubuntu -> Android (gts9wifi)"
+[[ $EUID -eq 0 ]] || { echo "Hata: root yetkisi gerekli."; exit 1; }
+[[ -f "$BASE/SHA256SUMS" ]] || { echo "Eksik: $BASE/SHA256SUMS"; exit 1; }
+
+for name in boot init_boot vendor_boot dtbo; do
+    img="$BASE/$name.img"
+    dev="$PARTS/$name"
+    [[ -f "$img" ]] || { echo "Eksik imaj: $img"; exit 1; }
+    [[ -b "$dev" ]] || { echo "Bölüm bulunamadı: $dev"; exit 1; }
+    [[ "$(readlink -f "$dev")" == /dev/sd[a-f][0-9]* ]] || {
+        echo "Beklenmeyen hedef: $dev -> $(readlink -f "$dev")"; exit 1; }
+    [[ "$(stat -c %s "$img")" -eq "${EXPECTED[$name]}" ]] || { echo "İmaj boyutu hatalı: $img"; exit 1; }
+    [[ "$(blockdev --getsize64 "$dev")" -eq "${EXPECTED[$name]}" ]] || { echo "Bölüm boyutu hatalı: $dev"; exit 1; }
+    (cd "$BASE" && grep " $name.img\$" SHA256SUMS | sha256sum -c --quiet -) || {
+        echo "sha256 uyuşmuyor: $img"; exit 1; }
+    echo "Kontrol OK: $name"
+done
+
+for name in boot init_boot vendor_boot dtbo; do
+    echo "Yazılıyor: $name"
+    dd if="$BASE/$name.img" of="$PARTS/$name" bs=4M iflag=fullblock conv=fsync status=progress
+done
+sync
+for name in boot init_boot vendor_boot dtbo; do
+    want=$(grep " $name.img\$" "$BASE/SHA256SUMS" | cut -d' ' -f1)
+    have=$(head -c "${EXPECTED[$name]}" "$PARTS/$name" | sha256sum | cut -d' ' -f1)
+    [[ "$want" == "$have" ]] || { echo "Yazma doğrulaması başarısız: $name — yeniden başlatılmıyor"; exit 1; }
+done
+echo "Android imajları doğrulandı; yeniden başlatılıyor."
+systemctl reboot
