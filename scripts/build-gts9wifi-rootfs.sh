@@ -214,8 +214,8 @@ for n in boot init_boot vendor_boot dtbo; do
 	install -m 0600 "$android/$n.img" "$db/$n.img"
 done
 (cd "$db" && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img > SHA256SUMS)
-(cd "$android" && grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' SHA256SUMS) | \
-	diff - <(cd "$db" && cat SHA256SUMS) >/dev/null || { echo 'Android boot set differs from the backup' >&2; exit 1; }
+diff <(grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' "$android/SHA256SUMS" | sort) \
+	<(sort "$db/SHA256SUMS") >/dev/null || { echo 'Android boot set differs from the backup' >&2; exit 1; }
 install -m 0755 "$repo/dualboot/ubuntu-to-android" "$rootfs/usr/local/sbin/ubuntu-to-android"
 printf '%%sudo ALL=(root) NOPASSWD: /usr/local/sbin/ubuntu-to-android\n' > "$rootfs/etc/sudoers.d/gts9wifi-android"
 chmod 0440 "$rootfs/etc/sudoers.d/gts9wifi-android"
