@@ -128,6 +128,9 @@ HOOK
 chmod +x "$hooks/configure.sh"
 
 echo "== 1/6 mmdebstrap $suite -> $rootfs"
+if [ "${SKIP_BOOTSTRAP:-0}" = 1 ] && [ -x "$rootfs/usr/bin/gnome-shell" ]; then
+	echo 'SKIP_BOOTSTRAP=1: reusing the existing package installation'
+else
 rm -rf -- "$rootfs"
 mmdebstrap --mode=root --variant=apt --arch=arm64 \
 	--components=main,restricted,universe,multiverse \
@@ -137,9 +140,13 @@ mmdebstrap --mode=root --variant=apt --arch=arm64 \
 	"deb $mirror $suite main restricted universe multiverse" \
 	"deb $mirror $suite-updates main restricted universe multiverse" \
 	"deb $mirror $suite-security main restricted universe multiverse"
+fi
 
 echo "== 2/6 kernel modules ($krel) and device firmware"
-cp -a "$kernel_out/modules-root/lib/modules/$krel" "$rootfs/usr/lib/modules/"
+install -d -m 0755 "$rootfs/usr/lib/modules"
+rm -rf -- "$rootfs/usr/lib/modules/$krel"
+cp -a --no-preserve=ownership "$kernel_out/modules-root/lib/modules/$krel" "$rootfs/usr/lib/modules/$krel"
+test -f "$rootfs/usr/lib/modules/$krel/modules.dep" || { echo 'modules not in place' >&2; exit 1; }
 chroot "$rootfs" depmod -a "$krel"
 # Device payload goes last so it wins over linux-firmware's generic blobs.
 tar -xzf "$firmware_tar" -C "$rootfs/usr/lib/firmware" --no-same-owner
@@ -216,8 +223,10 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 done
 
 echo "== 4/6 test user '$user'"
-chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$user" 2>/dev/null || \
-	chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input "$user"
+if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
+	chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$user" 2>/dev/null || \
+		chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input "$user"
+fi
 echo "$user:$password" | chroot "$rootfs" chpasswd
 chroot "$rootfs" passwd -e "$user" >/dev/null   # change the test password on first login
 
