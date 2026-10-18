@@ -1,0 +1,85 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] arm64: dts: qcom: gts9wifi: drop unused downstream carveouts
+
+The X710 DTS descends from the kalama reference tree and keeps its full
+downstream reserved-memory list: modem and CDSP firmware regions (both
+remoteprocs disabled; Wi-Fi SKU, no rmtfs), Samsung's debug/ramdump
+pools, the splash framebuffer, camera/CVP regions without a consumer and
+the Gunyah trust-ui/oem VM payloads that are never instantiated.  The
+kernel honours them all.
+
+Delete those 30 nodes (62 -> 32 reserved-memory children, the same set
+the Fedora port's gts9wifi-mem-reclaim removed at runtime and verified on
+hardware) and the memory-region properties of the two disabled
+remoteprocs that referenced them.  Firmware-owned carveouts (TZ/QTEE,
+hyp, uH/RKP, spu-tz-shared for the fingerprint stack), video-region and
+the GPU micro-code region stay.  Done here, at build time, because the
+runtime tool rewrote the boot partitions' DTBs on every boot.
+
+---
+--- a/arch/arm64/boot/dts/qcom/sm8550-samsung-gts9wifi.dts	2026-10-19 00:34:48.039015816 +0300
++++ b/arch/arm64/boot/dts/qcom/sm8550-samsung-gts9wifi.dts	2026-10-19 00:34:48.040231393 +0300
+@@ -1821,3 +1821,63 @@
+ 		};
+ 	};
+ };
++
++/*
++ * Reclaim the downstream carveouts nothing on this port uses (~812 MiB),
++ * at build time instead of rewriting the boot DTBs on every boot as the
++ * Fedora port's gts9wifi-mem-reclaim did.  Only regions whose consumer
++ * would be Linux go; firmware-owned ones (TZ/QTEE, hyp, uH/RKP, the SPU's
++ * spu-tz-shared region used by the fingerprint stack) stay.
++ */
++/ {
++	reserved-memory {
++		/* modem: remoteproc@4080000 is disabled, Wi-Fi SKU, no rmtfs */
++		/delete-node/ mpss-region@8a800000;
++		/delete-node/ mpss-dsm-region@d4d00000;
++		/delete-node/ q6-mpss-dtb-region@9b000000;
++		/delete-node/ rmtfs-region@d4a80000;
++		/delete-node/ ipa-fw-region@9b080000;
++		/delete-node/ ipa-gsi-region@9b090000;
++		/delete-node/ spu-modem-shared-region@9b2e0000;
++		/* Samsung debug/ramdump: no consumer node (sec-log is kept) */
++		/delete-node/ sec-qcom-rdx@880c00000;
++		/delete-node/ sec-debug-bl@880400000;
++		/delete-node/ sec-xbl-ramdump@a7d00000;
++		/delete-node/ sec-pmsg@880900000;
++		/delete-node/ sec-debug-pool@880100000;
++		/delete-node/ sec-reset-info@8801ff000;
++		/delete-node/ google-debug-kinfo@880b00000;
++		/delete-node/ hdm@880b01000;
++		/* CDSP: remoteproc@32300000 is disabled */
++		/delete-node/ cdsp-secure-heap-region@82800000;
++		/delete-node/ cdsp-region@9c900000;
++		/delete-node/ q6-cdsp-dtb-region@9e900000;
++		/*
++		 * Splash framebuffer and multimedia regions with no consumer
++		 * (camera runs on mainline CAMSS; video-region and the GPU
++		 * micro-code region are kept).
++		 */
++		/delete-node/ splash_region;
++		/delete-node/ camera-region@9b300000;
++		/delete-node/ cvp-region@9c200000;
++		/* Gunyah VM payloads: never instantiated (uh-guest/heap kept) */
++		/delete-node/ trust-ui-vm-region@f3600000;
++		/delete-node/ trust-ui-vm-swiotlb-region@f8100000;
++		/delete-node/ trust-ui-vm-dump-region@f80ee000;
++		/delete-node/ trust-ui-vm-qrt-region@f80ef000;
++		/delete-node/ trust-ui-vm-vblk0-ring-region@f80f8000;
++		/delete-node/ trust-ui-vm-vblk1-ring-region@f80fc000;
++		/delete-node/ oem-vm-region@f8400000;
++		/delete-node/ oem-vm-swiotlb-region@fcc04000;
++		/delete-node/ oem-vm-vblk0-ring-region@fcc00000;
++	};
++};
++
++/* Their only users, both disabled, lose every phandle in the property. */
++&{/soc@0/remoteproc@4080000} {
++	/delete-property/ memory-region;
++};
++
++&{/soc@0/remoteproc@32300000} {
++	/delete-property/ memory-region;
++};
