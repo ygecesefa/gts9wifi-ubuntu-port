@@ -8,6 +8,11 @@
 // into them: it sends its keys through a virtual keyboard device.  So the
 // button only has to open it.  Drag the button to move it; the position is
 // kept as fractions of the monitor so it survives rotation.
+//
+// The extension stays enabled on the lock screen (session-modes in
+// metadata.json) and the button is only hidden there: destroying this chrome
+// actor while the shield was coming up kept GNOME 46's lock from completing,
+// so every suspend waited out logind's 5 s delay-inhibitor timeout.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -26,6 +31,8 @@ export class KeyboardButton {
     enable() {
         this._settingsId = this._settings.connect('changed::keyboard-button',
             () => this._sync());
+        this._sessionId = Main.sessionMode.connect('updated',
+            () => this._syncVisible());
         this._sync();
     }
 
@@ -33,7 +40,15 @@ export class KeyboardButton {
         if (this._settingsId)
             this._settings.disconnect(this._settingsId);
         this._settingsId = 0;
+        if (this._sessionId)
+            Main.sessionMode.disconnect(this._sessionId);
+        this._sessionId = 0;
         this._destroyButton();
+    }
+
+    _syncVisible() {
+        if (this._button)
+            this._button.visible = !Main.sessionMode.isLocked;
     }
 
     _sync() {
@@ -70,6 +85,7 @@ export class KeyboardButton {
         this._monitorsId = Main.layoutManager.connect('monitors-changed',
             () => this._place());
         this._place();
+        this._syncVisible();
     }
 
     _destroyButton() {

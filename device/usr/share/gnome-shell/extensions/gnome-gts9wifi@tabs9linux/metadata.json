@@ -9,6 +9,10 @@
     "49",
     "50"
   ],
-  "version": 3,
-  "settings-schema": "org.gnome.shell.extensions.gts9wifi"
+  "version": 4,
+  "settings-schema": "org.gnome.shell.extensions.gts9wifi",
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ]
 }

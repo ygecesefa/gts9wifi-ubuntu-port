@@ -8,6 +8,12 @@
 # does not suspend again: time was spent suspended since the last press
 # (BOOTTIME - MONOTONIC grew; the kernel updates it before tasks thaw, unlike
 # suspend_stats) and the wake IRQ was the power key's.
+#
+# The screen is locked first and the suspend requested once the lock screen
+# is up (or after LOCK_WAIT_MS).  Locking from logind's PrepareForSleep
+# instead stalled: the panel goes dark at once, GNOME's lock animation never
+# finishes on it, and gnome-shell's delay inhibitor ran into logind's 5 s
+# timeout on every suspend.
 import os
 import struct
 import sys
@@ -18,6 +24,7 @@ from gi.repository import Gio, GLib
 EVENT = struct.Struct('llHHi')
 EV_KEY, KEY_POWER = 1, 116
 LONG_MS = 700
+LOCK_WAIT_MS = 2000
 
 
 def find_device():
@@ -62,6 +69,7 @@ class PowerKey:
         self.asleep = asleep()
         self.timer = 0
         self.ignore_release = False
+        self.lock_wait = 0
         self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM)
         self.session = Gio.bus_get_sync(Gio.BusType.SESSION)
         GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, self.fd,
@@ -102,10 +110,46 @@ class PowerKey:
             return
         if self.timer:
             self.cancel()
-            self.call(self.system, 'org.freedesktop.login1',
-                      '/org/freedesktop/login1',
-                      'org.freedesktop.login1.Manager', 'Suspend',
-                      GLib.Variant('(b)', (False,)))
+            self.lock_then_suspend()
+
+    def screensaver(self, method, args=None):
+        return self.session.call_sync(
+            'org.gnome.ScreenSaver', '/org/gnome/ScreenSaver',
+            'org.gnome.ScreenSaver', method, args, None,
+            Gio.DBusCallFlags.NONE, 1000, None)
+
+    def lock_then_suspend(self):
+        if self.lock_wait:
+            return
+        try:
+            if self.screensaver('GetActive').unpack()[0]:
+                self.suspend()
+                return
+            self.screensaver('SetActive', GLib.Variant('(b)', (True,)))
+        except GLib.Error as e:
+            print(f'lock failed: {e.message}', file=sys.stderr)
+            self.suspend()
+            return
+        self.lock_waited = 0
+        self.lock_wait = GLib.timeout_add(100, self.poll_lock)
+
+    def poll_lock(self):
+        self.lock_waited += 100
+        try:
+            active = self.screensaver('GetActive').unpack()[0]
+        except GLib.Error:
+            active = False
+        if not active and self.lock_waited < LOCK_WAIT_MS:
+            return True
+        self.lock_wait = 0
+        self.suspend()
+        return False
+
+    def suspend(self):
+        self.call(self.system, 'org.freedesktop.login1',
+                  '/org/freedesktop/login1',
+                  'org.freedesktop.login1.Manager', 'Suspend',
+                  GLib.Variant('(b)', (False,)))
 
     def long_press(self):
         self.timer = 0
