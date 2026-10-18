@@ -35,7 +35,8 @@ tar -tzf "$tarball" "$krel/modules.dep" >/dev/null 2>&1 \
 	|| { echo "$tarball has no module tree" >&2; exit 1; }
 
 echo "== copy $tarball ($sum) to $target"
-"${wrap[@]}" scp -q "${ssh_opts[@]}" "$tarball" "$target:$remote"
+# rsync --partial resumes a copy that a slow or relayed link dropped.
+"${wrap[@]}" rsync --partial --timeout=120 -e "ssh ${ssh_opts[*]}" "$tarball" "$target:$remote"
 
 echo "== install $krel on $target"
 # shellcheck disable=SC2029  # values are meant to expand locally
@@ -63,9 +64,13 @@ rm -f "$tarball"
 echo "== modules: $(find "$mods" -name '*.ko*' | wc -l)"
 if [ "$(uname -r)" = "$krel" ]; then
 	# A module that failed BTF/vermagic checks earlier stays unloaded until
-	# it is probed again; reloading ath11k is enough to bring Wi-Fi back.
-	asroot modprobe -r ath11k_pci 2>/dev/null || true
-	asroot modprobe ath11k_pci && echo "ath11k_pci loaded"
+	# it is probed again.  Never unload ath11k here: this session may run
+	# over that very Wi-Fi link.
+	if lsmod | grep -q '^ath11k_pci '; then
+		echo "ath11k_pci already loaded"
+	else
+		asroot modprobe ath11k_pci && echo "ath11k_pci loaded"
+	fi
 	sleep 8
 	nmcli -t -f DEVICE,TYPE,STATE dev | grep -E ':wifi:' || echo "no Wi-Fi device yet"
 	journalctl -k -b --no-pager | grep -iE 'BTF|disagrees|invalid module format' | tail -5 || true
