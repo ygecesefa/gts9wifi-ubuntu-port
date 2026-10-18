@@ -1,0 +1,19 @@
+# Android vendor image from super, mapped read-only by
+# gts9wifi-android-parts.  ext4 on this tablet; noload so a dirty journal is
+# never replayed (the mapping is read-only anyway).
+[Unit]
+Description=Android vendor image (read-only)
+Requires=gts9wifi-android-parts.service
+After=gts9wifi-android-parts.service
+DefaultDependencies=no
+Conflicts=umount.target
+Before=umount.target local-fs.target
+
+[Mount]
+What=/dev/mapper/vendor
+Where=/vendor
+Type=ext4
+Options=ro,noload,nodev,nosuid
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Map Android dynamic partitions from super (read-only)
+DefaultDependencies=no
+After=systemd-udevd.service dev-disk-by\x2dpartlabel-super.device
+Requires=dev-disk-by\x2dpartlabel-super.device
+Before=local-fs-pre.target vendor.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/gts9wifi-android-parts map vendor

@@ -1,0 +1,83 @@
+#!/usr/bin/python3
+"""Map Android dynamic partitions from `super`, read-only, with device-mapper.
+
+  gts9wifi-android-parts list            show the logical partitions
+  gts9wifi-android-parts map NAME...     create /dev/mapper/NAME (read-only)
+
+Parses the liblp metadata (geometry at 4 KiB, primary metadata slot 0 after
+the two geometry copies) and builds a dm-linear table per partition.  The
+super partition is only ever opened read-only and every mapping is created
+with --readonly; nothing is written to the tablet.  This is the gts9wifi
+equivalent of postmarketOS's make-dynpart-mappings.
+"""
+import struct
+import subprocess
+import sys
+
+SUPER = '/dev/disk/by-partlabel/super'
+RESERVED = 4096
+GEOMETRY_MAGIC = 0x616C4467
+HEADER_MAGIC = 0x414C5030
+TARGET_LINEAR = 0
+
+
+def read_metadata(dev=SUPER):
+    with open(dev, 'rb') as f:
+        f.seek(RESERVED)
+        geo = f.read(4096)
+        magic = struct.unpack_from('<I', geo, 0)[0]
+        if magic != GEOMETRY_MAGIC:
+            sys.exit(f'{dev}: no liblp geometry (magic {magic:#x})')
+        metadata_max_size = struct.unpack_from('<I', geo, 40)[0]
+        f.seek(RESERVED + 2 * 4096)
+        meta = f.read(metadata_max_size)
+    magic, _, _, header_size = struct.unpack_from('<IHHI', meta, 0)
+    if magic != HEADER_MAGIC:
+        sys.exit(f'{dev}: bad liblp header (magic {magic:#x})')
+    tables_size = struct.unpack_from('<I', meta, 44)[0]
+    tables = meta[header_size:header_size + tables_size]
+    (p_off, p_num, p_size), (e_off, e_num, e_size) = (
+        struct.unpack_from('<III', meta, 80 + 12 * i) for i in range(2))
+    extents = [struct.unpack_from('<QIQI', tables, e_off + i * e_size) for i in range(e_num)]
+    parts = {}
+    for i in range(p_num):
+        raw = tables[p_off + i * p_size:p_off + (i + 1) * p_size]
+        name = raw[:36].split(b'\0')[0].decode()
+        first, count = struct.unpack_from('<II', raw, 40)
+        parts[name] = extents[first:first + count]
+    return parts
+
+
+def dm_table(extents, dev=SUPER):
+    lines, start = [], 0
+    for sectors, target, data, source in extents:
+        if target != TARGET_LINEAR or source != 0:
+            sys.exit('only linear extents on super itself are supported')
+        lines.append(f'{start} {sectors} linear {dev} {data}')
+        start += sectors
+    return '\n'.join(lines) + '\n'
+
+
+def main(argv):
+    parts = read_metadata()
+    if len(argv) == 2 and argv[1] == 'list':
+        for name, ext in parts.items():
+            print(f'{name:24s} {sum(e[0] for e in ext) * 512 / 2**20:8.0f} MiB  {len(ext)} extent(s)')
+        return 0
+    if len(argv) >= 3 and argv[1] == 'map':
+        for name in argv[2:]:
+            if name not in parts:
+                sys.exit(f'no logical partition {name!r} in super')
+            if not parts[name]:
+                sys.exit(f'{name} is empty')
+            if subprocess.run(['dmsetup', 'info', name], capture_output=True).returncode == 0:
+                continue
+            subprocess.run(['dmsetup', 'create', name, '--readonly'],
+                           input=dm_table(parts[name]), text=True, check=True)
+            print(f'/dev/mapper/{name} mapped read-only')
+        return 0
+    sys.exit(__doc__)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

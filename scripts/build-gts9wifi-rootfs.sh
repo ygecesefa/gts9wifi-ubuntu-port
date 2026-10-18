@@ -45,7 +45,7 @@ packages=$(tr -d ' \n' <<'EOF'
 ubuntu-minimal,ubuntu-standard,
 systemd,systemd-sysv,systemd-resolved,systemd-timesyncd,udev,dbus,
 initramfs-tools,busybox-initramfs,
-e2fsprogs,dosfstools,parted,gdisk,fdisk,
+e2fsprogs,dosfstools,parted,gdisk,fdisk,dmsetup,
 zstd,xz-utils,lz4,
 sudo,locales,tzdata,console-setup,keyboard-configuration,
 cloud-guest-utils,
@@ -228,6 +228,12 @@ cp -a "$ov/etc/systemd/system/." "$rootfs/etc/systemd/system/"
 cp -a --no-preserve=ownership "$repo/device/." "$rootfs/"
 # First boot: never write to the Android persist partition.
 sed -i 's/^Options=rw,/Options=ro,/' "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount"
+# A read-only ext4 mount still replays a dirty journal, i.e. writes to the
+# Android partition.  noload stops that for dsp and persist.
+sed -i 's/^Options=ro,nosuid/Options=ro,noload,nosuid/' "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount"
+sed -i 's/^Options=ro$/Options=ro,noload/' "$rootfs/usr/lib/systemd/system/vendor-dsp.mount"
+grep -q noload "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount" && \
+	grep -q noload "$rootfs/usr/lib/systemd/system/vendor-dsp.mount" || { echo 'noload not applied' >&2; exit 1; }
 sed -i 's/fedora-gts9wifi/ubuntu-gts9wifi/' "$rootfs/usr/libexec/gts9wifi-usb-gadget"
 mkdir -p "$rootfs/vendor/dsp" "$rootfs/vendor/firmware_mnt" "$rootfs/mnt/vendor/persist"
 
@@ -254,7 +260,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-panel-coldboot-recover.service gts9wifi-grow-rootfs.service \
 	gts9wifi-wifi-recover.service \
 	gts9wifi-x11-dir-fix.path vendor-dsp.mount vendor-firmware_mnt.mount \
-	mnt-vendor-persist.mount gts9wifi-adsp-boot.service pd-mapper.service \
+	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
 	ssh.service NetworkManager.service; do
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done

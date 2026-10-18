@@ -56,7 +56,7 @@ next image afterwards.
 | 3 | Rotation sensor: `hexagonrpcd`, `libssc`, patched `iio-sensor-proxy` | Fedora 5 | live (packages) |
 | 4 | Cameras in apps + **rear autofocus**: S9 Ultra libcamera (software ISP, AF) with gts9wifi tuning for the two HI1337, `v4l2-relayd` | Fedora 4/4b/11 | live (packages) |
 | 5 | Double-tap to wake + device-control GNOME extension (port to GNOME 46) | Fedora 14 | live |
-| 6 | `/vendor` (Android `super`) mounted read-only via dm-linear | Fedora open | live |
+| 6 | ~~`/vendor`~~ — **done**: `gts9wifi-android-parts` parses super's liblp metadata, maps `vendor` read-only with dm-linear; mounted `ro,noload`. Also fixed: `dsp` and `persist` were mounted without `noload`, so a dirty journal would have been replayed onto the Android partitions | Fedora open | live |
 | 7 | Check file capabilities, early-boot clock, ADSP late-start safety | Fedora open | live |
 | 8 | Under-display fingerprint (EL721) — blocked on Fedora at `KEYMASTER_NOT_CONFIGURED` | Fedora 15 | live, large |
 | 9 | **Charging bypass**: `charge_types` (Standard/Bypass) in the SM5714 driver (stock `ovp_bypass_mode` + two register writes) and a toggle | Fedora 13 | **kernel** + live UI |
