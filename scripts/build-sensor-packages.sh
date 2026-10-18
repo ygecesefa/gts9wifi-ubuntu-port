@@ -58,7 +58,7 @@ step() { printf '\n########## %s\n' "$1"; }
 
 # ---------------------------------------------------------------------------
 step 'throwaway arm64 build chroot'
-build_deps='build-essential ninja-build pkg-config git ca-certificates curl
+build_deps='build-essential ninja-build pkg-config git ca-certificates curl libjson-c-dev
 python3-pip python3-setuptools python3-dev python3-gi python3-protobuf
 libglib2.0-dev libgudev-1.0-dev libudev-dev
 libqmi-glib-dev libmbim-glib-dev libqrtr-glib-dev
@@ -192,6 +192,9 @@ meson compile -C output
 DESTDIR=/build/stage-hexagonrpcd meson install --no-rebuild -C output
 install -Dm644 /build/10-fastrpc.rules \
 	/build/stage-hexagonrpcd/usr/lib/udev/rules.d/10-fastrpc.rules
+# gts9wifi: ship sscregistrygen (built when json-c is present, not installed
+# by meson) so the HexagonFS sensor registry can be generated on the tablet.
+install -Dm755 output/tools/sscregistrygen /build/stage-hexagonrpcd/usr/bin/sscregistrygen
 echo 'hexagonrpcd built'"
 
 # Upstream hexagonrpc ships no systemd units at all â€” Alpine adds them with a
@@ -258,13 +261,14 @@ case "$1" in
 				--shell /usr/sbin/nologin --ingroup fastrpc \
 				--gecos 'FastRPC' fastrpc
 		fi
-		systemctl enable hexagonrpcd-adsp-sensorspd.service >/dev/null 2>&1 || true
+		# gts9wifi: not enabled here; a late ADSP sensor-PD start has hung
+		# this SoC on the Fedora port, so it is enabled only after testing.
 		;;
 esac
 exit 0
 POSTINST
 
-package_tree /build/stage-hexagonrpcd hexagonrpcd "$hexagonrpc_ver" \
+package_tree /build/stage-hexagonrpcd hexagonrpcd "$hexagonrpc_ver-gts9wifi1" \
 	'libc6, adduser' \
 	'Qualcomm FastRPC daemon exposing the DSP sensor protection domain' \
 	"$buildroot/build/stage-hexagonrpcd-DEBIAN"
