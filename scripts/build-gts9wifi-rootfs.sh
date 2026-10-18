@@ -43,7 +43,7 @@ esac
 # Package set of the S9 Ultra port, localised for Turkish instead of Spanish.
 packages=$(tr -d ' \n' <<'EOF'
 ubuntu-minimal,ubuntu-standard,
-systemd,systemd-sysv,systemd-resolved,udev,dbus,
+systemd,systemd-sysv,systemd-resolved,systemd-timesyncd,udev,dbus,
 initramfs-tools,busybox-initramfs,
 e2fsprogs,dosfstools,parted,gdisk,fdisk,
 zstd,xz-utils,lz4,
@@ -224,6 +224,8 @@ for u in "$ov"/usr/lib/systemd/system/*; do
 	cp -a "$u" "$rootfs/usr/lib/systemd/system/"
 done
 cp -a "$ov/etc/systemd/system/." "$rootfs/etc/systemd/system/"
+# This port's own device files (on top of the Fedora overlay).
+cp -a --no-preserve=ownership "$repo/device/." "$rootfs/"
 # First boot: never write to the Android persist partition.
 sed -i 's/^Options=rw,/Options=ro,/' "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount"
 sed -i 's/fedora-gts9wifi/ubuntu-gts9wifi/' "$rootfs/usr/libexec/gts9wifi-usb-gadget"
