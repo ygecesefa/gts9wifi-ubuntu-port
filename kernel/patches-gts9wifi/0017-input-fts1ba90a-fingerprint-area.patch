@@ -1,0 +1,264 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] Input: fts1ba90a: fingerprint (FOD) area for the EL721 reader
+
+The under-display EL721 needs to know when a finger is on the sensor and
+must not have that finger reach the desktop as a touch.  The S9 Ultra
+port gets both from its Goodix firmware's FOD events; the FTS1BA90A's
+FOD gesture codes are not known here, so track the area in the driver
+from ordinary contacts instead:
+
+  fod_rect    "x1 y1 x2 y2" in raw controller coordinates
+  fod_enable  1 while a fingerprint operation runs
+  fod_state   "idle|pressed|released x y sequence", sysfs_notify'd
+
+With fod_enable set, a contact that lands inside the rectangle is held
+back from the input stack and drives fod_state until it lifts; contacts
+elsewhere are unaffected.  Disabling, or suspending, ends the operation
+and releases a held contact.  The attribute set matches the Ultra port's
+Goodix one, so the EL721 libfprint driver needs no touch-specific code.
+
+---
+--- a/drivers/input/touchscreen/fts1ba90a.c	2026-10-19 02:20:39.293955040 +0300
++++ b/drivers/input/touchscreen/fts1ba90a.c	2026-10-19 02:20:39.294994226 +0300
+@@ -15,6 +15,7 @@
+ #include <linux/input/touchscreen.h>
+ #include <linux/interrupt.h>
+ #include <linux/module.h>
++#include <linux/mutex.h>
+ #include <linux/pm_wakeup.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/unaligned.h>
+@@ -106,6 +107,22 @@
+ 	bool dtw_enabled;	/* user toggle; the gesture is armed per suspend */
+ 	bool lpm_suspended;	/* suspended with rails up and the gesture armed */
+ 	bool wake_pending;	/* gesture IRQ arrived before the bus resumed */
++	/*
++	 * Under-display fingerprint (EL721) area, in raw controller
++	 * coordinates.  While fod_enabled, a finger that lands inside the
++	 * rectangle is not reported as a touch; it drives fod_state instead
++	 * (the interface the EL721 libfprint driver reads).  The rectangle is
++	 * tracked here, from ordinary contacts, so nothing depends on the
++	 * firmware's own FOD gesture codes.
++	 */
++	struct mutex fod_lock;
++	bool fod_enabled;
++	bool fod_rect_valid;
++	u16 fod_rect[4];	/* x1 y1 x2 y2 */
++	int fod_slot;		/* contact held in the area, or -1 */
++	enum { FTS_FOD_IDLE, FTS_FOD_PRESSED, FTS_FOD_RELEASED } fod_state;
++	unsigned int fod_x, fod_y;
++	u64 fod_seq;
+ 	u8 events[FTS_FIFO_MAX * FTS_EVENT_SIZE];
+ };
+ 
+@@ -378,6 +395,45 @@
+ 	       ev[1] == FTS_GESTURE_ID_DOUBLETAP_WAKEUP;
+ }
+ 
++/*
++ * Route a contact to the fingerprint area.  Returns true when the contact
++ * belongs to it and must not be reported as a touch.  Called from the IRQ
++ * thread with the slot already selected.
++ */
++static bool fts1ba90a_fod_contact(struct fts1ba90a *ts, unsigned int slot,
++				  unsigned int action, unsigned int x,
++				  unsigned int y)
++{
++	bool held, changed = false;
++
++	mutex_lock(&ts->fod_lock);
++	held = ts->fod_slot == (int)slot;
++	if (held && action == FTS_ACTION_RELEASE) {
++		ts->fod_slot = -1;
++		ts->fod_state = FTS_FOD_RELEASED;
++		ts->fod_seq++;
++		changed = true;
++	} else if (held) {
++		ts->fod_x = x;
++		ts->fod_y = y;
++	} else if (action == FTS_ACTION_PRESS && ts->fod_enabled &&
++		   ts->fod_rect_valid && ts->fod_slot < 0 &&
++		   x >= ts->fod_rect[0] && x <= ts->fod_rect[2] &&
++		   y >= ts->fod_rect[1] && y <= ts->fod_rect[3]) {
++		ts->fod_slot = slot;
++		ts->fod_state = FTS_FOD_PRESSED;
++		ts->fod_x = x;
++		ts->fod_y = y;
++		ts->fod_seq++;
++		held = changed = true;
++	}
++	mutex_unlock(&ts->fod_lock);
++
++	if (changed)
++		sysfs_notify(&ts->client->dev.kobj, NULL, "fod_state");
++	return held;
++}
++
+ static void fts1ba90a_report_touch(struct fts1ba90a *ts, const u8 *ev)
+ {
+ 	unsigned int slot, action, ttype, x, y, z;
+@@ -410,6 +466,12 @@
+ 	input_mt_slot(ts->input, slot);
+ 
+ 	action = ev[0] >> 6;
++	x = (ev[1] << 4) | (ev[3] >> 4);
++	y = (ev[2] << 4) | (ev[3] & 0xf);
++
++	if (fts1ba90a_fod_contact(ts, slot, action, x, y))
++		return;
++
+ 	if (action == FTS_ACTION_RELEASE) {
+ 		input_mt_report_slot_inactive(ts->input);
+ 		return;
+@@ -418,8 +480,6 @@
+ 	if (action != FTS_ACTION_PRESS && action != FTS_ACTION_MOVE)
+ 		return;
+ 
+-	x = (ev[1] << 4) | (ev[3] >> 4);
+-	y = (ev[2] << 4) | (ev[3] & 0xf);
+ 	z = ev[6] & 0x3f;
+ 
+ 	input_mt_report_slot_state(ts->input, MT_TOOL_FINGER, true);
+@@ -590,8 +650,111 @@
+ }
+ static DEVICE_ATTR_RW(double_tap_to_wake);
+ 
++/*
++ * Fingerprint-area interface, the same as the S9 Ultra port's Goodix one so
++ * the EL721 libfprint driver works unchanged:
++ *   fod_rect    "x1 y1 x2 y2" in raw controller coordinates
++ *   fod_enable  1 while a fingerprint operation runs
++ *   fod_state   "idle|pressed|released x y sequence" (sysfs_notify on change)
++ * Disabling releases a held contact as a fingerprint release; the finger is
++ * not handed back to the input stack.
++ */
++static ssize_t fod_rect_show(struct device *dev, struct device_attribute *attr,
++			     char *buf)
++{
++	struct fts1ba90a *ts = dev_get_drvdata(dev);
++	ssize_t count;
++
++	mutex_lock(&ts->fod_lock);
++	count = sysfs_emit(buf, "%u %u %u %u\n", ts->fod_rect[0],
++			   ts->fod_rect[1], ts->fod_rect[2], ts->fod_rect[3]);
++	mutex_unlock(&ts->fod_lock);
++	return count;
++}
++
++static ssize_t fod_rect_store(struct device *dev, struct device_attribute *attr,
++			      const char *buf, size_t count)
++{
++	struct fts1ba90a *ts = dev_get_drvdata(dev);
++	unsigned int v[4];
++
++	if (sscanf(buf, "%u %u %u %u", &v[0], &v[1], &v[2], &v[3]) != 4 ||
++	    v[0] >= v[2] || v[1] >= v[3] || v[2] > FTS_MAX_X || v[3] > FTS_MAX_Y)
++		return -EINVAL;
++
++	mutex_lock(&ts->fod_lock);
++	ts->fod_rect[0] = v[0];
++	ts->fod_rect[1] = v[1];
++	ts->fod_rect[2] = v[2];
++	ts->fod_rect[3] = v[3];
++	ts->fod_rect_valid = true;
++	mutex_unlock(&ts->fod_lock);
++	return count;
++}
++static DEVICE_ATTR_RW(fod_rect);
++
++static ssize_t fod_enable_show(struct device *dev,
++			       struct device_attribute *attr, char *buf)
++{
++	struct fts1ba90a *ts = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n", ts->fod_enabled);
++}
++
++static ssize_t fod_enable_store(struct device *dev,
++				struct device_attribute *attr,
++				const char *buf, size_t count)
++{
++	struct fts1ba90a *ts = dev_get_drvdata(dev);
++	bool enabled, changed = false;
++	int ret;
++
++	ret = kstrtobool(buf, &enabled);
++	if (ret)
++		return ret;
++
++	mutex_lock(&ts->fod_lock);
++	ts->fod_enabled = enabled;
++	if (!enabled && ts->fod_slot >= 0) {
++		ts->fod_slot = -1;
++		ts->fod_state = FTS_FOD_RELEASED;
++		ts->fod_seq++;
++		changed = true;
++	} else if (enabled && ts->fod_slot < 0) {
++		ts->fod_state = FTS_FOD_IDLE;
++	}
++	mutex_unlock(&ts->fod_lock);
++
++	if (changed)
++		sysfs_notify(&dev->kobj, NULL, "fod_state");
++	return count;
++}
++static DEVICE_ATTR_RW(fod_enable);
++
++static ssize_t fod_state_show(struct device *dev,
++			      struct device_attribute *attr, char *buf)
++{
++	static const char *const names[] = {
++		[FTS_FOD_IDLE] = "idle",
++		[FTS_FOD_PRESSED] = "pressed",
++		[FTS_FOD_RELEASED] = "released",
++	};
++	struct fts1ba90a *ts = dev_get_drvdata(dev);
++	ssize_t count;
++
++	mutex_lock(&ts->fod_lock);
++	count = sysfs_emit(buf, "%s %u %u %llu\n", names[ts->fod_state],
++			   ts->fod_x, ts->fod_y, ts->fod_seq);
++	mutex_unlock(&ts->fod_lock);
++	return count;
++}
++static DEVICE_ATTR_RO(fod_state);
++
+ static struct attribute *fts1ba90a_attrs[] = {
+ 	&dev_attr_double_tap_to_wake.attr,
++	&dev_attr_fod_rect.attr,
++	&dev_attr_fod_enable.attr,
++	&dev_attr_fod_state.attr,
+ 	NULL,
+ };
+ 
+@@ -618,6 +781,10 @@
+ 
+ 	ts->client = client;
+ 	i2c_set_clientdata(client, ts);
++	ts->fod_slot = -1;
++	ret = devm_mutex_init(dev, &ts->fod_lock);
++	if (ret)
++		return ret;
+ 
+ 	ts->avdd = devm_regulator_get(dev, "avdd");
+ 	if (IS_ERR(ts->avdd))
+@@ -695,6 +862,19 @@
+ 	struct fts1ba90a *ts = dev_get_drvdata(dev);
+ 	int ret;
+ 
++	/*
++	 * A fingerprint operation does not survive suspend: end it so no
++	 * contact stays held and the reader sees fod_enable 0 on resume.
++	 */
++	mutex_lock(&ts->fod_lock);
++	ts->fod_enabled = false;
++	if (ts->fod_slot >= 0) {
++		ts->fod_slot = -1;
++		ts->fod_state = FTS_FOD_RELEASED;
++		ts->fod_seq++;
++	}
++	mutex_unlock(&ts->fod_lock);
++
+ 	if (!ts->dtw_enabled || !device_may_wakeup(dev))
+ 		goto power_off;
+ 

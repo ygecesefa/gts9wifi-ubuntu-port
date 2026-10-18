@@ -175,6 +175,14 @@ def boot():
     children = []
     owner = None
     publish('starting')
+    # No suspend while the SPU and the secure owner come up (a suspend
+    # overlapping a remote processor start is what froze the ADSP on this
+    # board); released once readiness is decided either way.
+    inhibitor = subprocess.Popen(
+        ['systemd-inhibit', '--what=sleep', '--mode=block',
+         '--who=gts9wifi-fingerprint-secure', '--why=Fingerprint secure start',
+         'sleep', 'infinity'], stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         Path('/sys/module/firmware_class/parameters/path').write_text(str(FIRMWARE))
         for module in MODULES:
@@ -238,12 +246,14 @@ def boot():
                             raise RuntimeError('authenticated secure initialization failed')
                         if line == b'SECURE_READY' and not ready:
                             ready = True
+                            inhibitor.terminate()
                             print('Secure cache verified; fingerprint service ready', flush=True)
                 if not ready and time.monotonic() >= deadline:
                     raise RuntimeError('secure initialization timed out')
                 if ready:
                     publish('ready', owner)
     except BaseException as error:
+        inhibitor.terminate()
         publish('failed', owner)
         print(f'Secure startup unavailable: {error}; retaining resources until reboot',
               flush=True)

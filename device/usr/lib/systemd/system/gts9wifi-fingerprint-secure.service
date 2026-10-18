@@ -3,6 +3,9 @@ Description=Fingerprint secure start (SPU, Keymaster, HwVault), once per boot
 Documentation=file:///usr/libexec/gts9wifi-fingerprint-secure
 After=local-fs.target systemd-udev-settle.service gts9wifi-fingerprint-runtime.service
 After=vendor.mount vendor-firmware_mnt.mount
+# Never overlap the panel recovery's pm_test suspend cycle: it ran while the
+# SPSS firmware was loading and the suspend was refused (EIO).
+After=gts9wifi-panel-coldboot-recover.service
 Wants=gts9wifi-fingerprint-runtime.service
 Before=fprintd.service
 ConditionPathExists=/sys/bus/platform/devices/egis-el721

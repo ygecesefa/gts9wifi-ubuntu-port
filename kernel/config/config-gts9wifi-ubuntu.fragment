@@ -133,3 +133,8 @@ CONFIG_TEE=y
 # probe deferred for the rest of the boot.  Exactly the failure mode this
 # fragment's header warns about, one more time.
 CONFIG_INTERCONNECT_QCOM_OSM_L3=y
+
+# Touchscreen as a module, so its fingerprint-area (FOD) support can be
+# iterated on a running tablet; it is only needed once the root filesystem
+# is up (GDM), and udev loads it from the DT compatible.
+CONFIG_TOUCHSCREEN_FTS1BA90A=m

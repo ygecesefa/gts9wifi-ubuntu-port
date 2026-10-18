@@ -18,8 +18,9 @@
 #include <glib/gstdio.h>
 
 #define EL721_FIRMWARE "/var/lib/gts9wifi/fingerprint/firmware"
-/* gts9wifi: FTS1BA90A touchscreen; its FOD attributes are still to be written (#8). */
+/* gts9wifi: FTS1BA90A touchscreen; FOD area from kernel patch 0017. */
 #define EL721_TOUCH "/sys/bus/i2c/devices/10-0049"
+#define EL721_FOD_RECT "700 2250 960 2480\n"
 #define EL721_PANEL "/sys/class/backlight/ae94000.dsi.0"
 #define EL721_VISUAL_STATE "/run/gts9wifi-fingerprint/active"
 #define EL721_UI_LEASE "/run/gts9wifi-fingerprint-ui/ready"
@@ -208,7 +209,10 @@ udfps_begin (FpiDeviceEl721 *self, GError **error)
   if (self->udfps_active)
     return TRUE;
 
-  if (!write_child (EL721_TOUCH, "fod_rect", "854 2732 994 2872\n", error) ||
+  /* gts9wifi: raw FTS1BA90A coordinates of the X710's sensor, measured on
+   * the tablet (presses centred near 830,2350; the Ultra's Goodix rectangle
+   * was 854 2732 994 2872). */
+  if (!write_child (EL721_TOUCH, "fod_rect", EL721_FOD_RECT, error) ||
       !write_child (EL721_TOUCH, "fod_enable", "0\n", error))
     return FALSE;
   if (!read_fod_state (&pressed, &released, &x, &y, &self->fod_sequence,
