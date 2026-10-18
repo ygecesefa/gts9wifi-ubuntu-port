@@ -61,17 +61,32 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Audio (CS35L45) | ✅ | speakers play (owner confirmed) |
 | Battery / charging (SM5714) | ✅ | |
 | S Pen (WEZ01) | ✅ | position, pressure 0–4095, hover distance, **tilt X/Y** (measured −29…+35) |
-| Cameras (2× HI1337, DW9808 lens) | 🟡 | sensors and lens probe, CAMSS graph up; no app support until libcamera (stage B) |
-| Rear camera autofocus | — | lens controllable (focus_absolute 0–1023); AF loop comes with the Ultra libcamera (stage B) |
+| Cameras (2× HI1337, DW9808 lens) | ✅ | front and rear in apps (libcamera + PipeWire, GPU soft ISP, full field of view); GNOME Snapshot takes pictures. Live on the tablet, in the next image |
+| Rear camera autofocus | ✅ | continuous AF (S9 Ultra libcamera software AF on the DW9808) |
 | Hardware video decode | ✅ | iris VPU: H.264, HEVC, VP9 1080p, 300/300 frames, ~10–15× less CPU than software; GStreamer picks it automatically (GNOME Videos/Totem). Browsers still decode in software (no VA-API for the VPU) |
 | Hardware video encode | ✅ | iris VPU: H.264 and HEVC 1080p at ~170–300 fps (`v4l2h264enc`/`v4l2h265enc`) |
 | Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
 | Rotation, ambient light, compass | ✅ | ADSP sensors through hexagonrpcd + libssc + patched iio-sensor-proxy (from the S9 Ultra port); HexagonFS tree generated from the tablet's own vendor/dsp. Screen rotates in GNOME |
 | Vulkan | ✅ | Turnip Adreno 740, Mesa 25.2.8, Vulkan 1.4. No Vulkan Video (Turnip implements none) |
 | Fingerprint | — | |
-| Suspend | — | |
+| Suspend / wake | ✅ | s2idle; power key wakes instantly, double tap to wake in under 1 s. Live on the tablet, in the next image (the double-tap driver fix needs the next kernel) |
+| Power key | ✅ | press and release: suspend · hold: Restart / Power Off menu |
+| On-screen keyboard | ✅ | opens on tapping a text field in GTK apps, Chromium and Firefox; not in XWayland (X11) apps — see below |
 
 This table is only updated from tests on the real tablet.
+
+## Using the tablet
+
+- **On-screen keyboard by gesture:** swipe up from the bottom edge of the
+  screen, starting near the bottom-left corner. This opens GNOME's keyboard
+  anywhere, including in apps where tapping a text field does not bring it up
+  (XWayland/X11 apps, Wine).
+- **Power key:** press and release to suspend, press again to wake; hold it
+  for about a second for the Restart / Power Off menu.
+- **Double tap to wake:** on by default; toggle it in the *Tab S9 device
+  controls* extension's settings (Extensions app).
+- Electron apps (VS Code, Discord, …) open the keyboard only when started on
+  Wayland with `--ozone-platform=wayland --enable-wayland-ime`.
 
 ## Documentation
 
