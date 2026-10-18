@@ -37,6 +37,8 @@ MANIFEST = BASE / 'SHA256SUMS'
 STATE = Path('/run/gts9wifi-fingerprint-secure')
 LOG = Path('/var/log/gts9wifi-fingerprint-secure')
 OWNER = '/usr/libexec/gts9wifi-fingerprint-secure-owner'
+# This vendor's spdaemon waits for a context manager on /dev/vndbinder.
+CTXMGR = '/usr/libexec/gts9wifi-binder-ctxmgr'
 SPSS_UTILS_NAME = 'sys/devices/platform/soc/soc:qcom,spss_utils/firmware_name'
 MODULES = ('qcom_spss_irq', 'qcom_sp_hlos_heap', 'qcom_glink_spss',
            'qcom_spss', 'spss_utils', 'spcom', 'snvm', 'qcomtee')
@@ -71,7 +73,9 @@ def runtime_preflight():
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f'runtime hash mismatch: {name}')
     protected(RUNTIME / 'lib64/liblog_capture.so')
+    protected(RUNTIME / 'lib64/libvmmem_shim.so')
     protected(Path(OWNER))
+    protected(Path(CTXMGR))
     for module in MODULES:
         command('modinfo', '-n', module)
 
@@ -132,11 +136,19 @@ def publish(state, owner=None):
 
 
 def daemon_argv(name):
-    """sec_nvm/spdaemon in a private mount namespace with Ubuntu-local NVM."""
+    """sec_nvm/spdaemon in a private mount namespace with Ubuntu-local NVM.
+
+    The Android library path and the bionic log shim are given to the
+    Android linker only: in the environment of the glibc unshare/sh wrapper
+    they make it load bionic's libc and crash (SIGTRAP) before the daemon
+    ever starts."""
     binds = ' && '.join(
         f'mount --bind {NVM / d} /mnt/vendor/{d}' for d in ('persist', 'spunvm'))
+    preload = ':'.join(str(RUNTIME / 'lib64' / so) for so in
+                       ('liblog_capture.so', 'libvmmem_shim.so'))
+    android_env = f'LD_LIBRARY_PATH={RUNTIME / "lib64"} LD_PRELOAD={preload}'
     return ['unshare', '--mount', '--propagation', 'private', 'sh', '-c',
-            f'{binds} && exec "$0" "$1"',
+            f'{binds} && exec env {android_env} "$0" "$1"',
             str(RUNTIME / 'bin/linker64'), str(RUNTIME / 'bin' / name)]
 
 
@@ -153,6 +165,10 @@ def boot():
     for d in ('persist', 'spunvm'):
         (NVM / d).mkdir(mode=0o700, parents=True, exist_ok=True)
         Path('/mnt/vendor', d).mkdir(parents=True, exist_ok=True)
+    # sec_nvm waits forever for its folder rather than creating it (Android's
+    # init does), and spdaemon then times out on nvm_ready.
+    (NVM / 'persist/secnvm').mkdir(mode=0o700, exist_ok=True)
+    (NVM / 'spunvm/iar_db').mkdir(mode=0o700, exist_ok=True)
     children = []
     owner = None
     publish('starting')
@@ -168,9 +184,11 @@ def boot():
         name_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         real = list(Path('/sys/devices').glob('**/spss_utils*/firmware_name'))
         name_file.write_text(real[0].read_text() if real else 'spss1p.mdt\n')
-        env = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin',
-               'LD_LIBRARY_PATH': str(RUNTIME / 'lib64'),
-               'LD_PRELOAD': str(RUNTIME / 'lib64/liblog_capture.so')}
+        env = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'}
+        with (LOG / 'ctxmgr.log').open('wb') as log:
+            children.append(subprocess.Popen([CTXMGR, '/dev/vndbinder'],
+                stdin=subprocess.DEVNULL, stdout=log, stderr=log))
+        time.sleep(0.2)
         for name in ('sec_nvm', 'spdaemon'):
             with (LOG / (name + '.log')).open('wb') as log:
                 child = subprocess.Popen(daemon_argv(name), env=env,

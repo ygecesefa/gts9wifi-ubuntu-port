@@ -1,7 +1,9 @@
 #!/bin/bash
-# Build liblog_capture.so for Android's bionic, without an NDK.
+# Build the two bionic LD_PRELOAD shims, without an NDK:
+# liblog_capture.so (Android log -> stderr) and libvmmem_shim.so (libspcom's
+# mem_buf calls, done by the kernel heap here).
 #
-#   build-liblog-capture.sh LIBC_SO OUT_SO
+#   build-liblog-capture.sh LIBC_SO OUT_SO   (libvmmem_shim.so goes next to it)
 #
 # LIBC_SO is the tablet's bionic libc.so (the copy gts9wifi-fingerprint-runtime
 # put in /var/lib/gts9wifi/fingerprint/runtime/lib64); it is only linked
@@ -19,3 +21,7 @@ clang --target=aarch64-linux-android29 -fuse-ld=lld -shared -nostdlib \
 	-Wl,-soname,liblog_capture.so -Wl,--hash-style=gnu -Wl,-z,now \
 	"$tmp/liblog_capture.o" -L"$tmp" -lc -o "$out"
 llvm-readelf -d "$out" | grep -E 'NEEDED|SONAME'
+clang --target=aarch64-linux-android29 -O2 -fPIC -fvisibility=hidden \
+	-ffreestanding -Wall -Wextra -Werror -shared -nostdlib -fuse-ld=lld \
+	-Wl,-soname,libvmmem_shim.so "$(dirname "$0")/libvmmem_shim.c" \
+	-o "$(dirname "$out")/libvmmem_shim.so"

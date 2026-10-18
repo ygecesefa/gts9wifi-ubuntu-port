@@ -81,6 +81,42 @@ EXPORT int __android_log_buf_print(int bufid, int prio, const char *tag,
 	return ret;
 }
 
+/* liblog's structured entry point, used by libbase LOG() and LOG(FATAL). */
+struct __android_log_message {
+	size_t struct_size;
+	int buffer_id;
+	int priority;
+	const char *tag;
+	const char *file;
+	unsigned int line;
+	const char *message;
+};
+
+EXPORT void __android_log_write_log_message(struct __android_log_message *msg)
+{
+	if (msg)
+		emit(msg->priority, msg->tag, msg->message);
+}
+
+void abort(void);
+
+EXPORT void __android_log_assert(const char *cond, const char *tag,
+				 const char *fmt, ...)
+{
+	char text[1000];
+	va_list ap;
+
+	if (fmt) {
+		va_start(ap, fmt);
+		vsnprintf(text, sizeof(text), fmt, ap);
+		va_end(ap);
+		emit(7, tag, text);
+	} else {
+		emit(7, tag, cond ? cond : "assertion failed");
+	}
+	abort();
+}
+
 /* Never drop a message because of a priority filter. */
 EXPORT int __android_log_is_loggable(int prio, const char *tag, int def)
 {

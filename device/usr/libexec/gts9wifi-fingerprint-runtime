@@ -29,8 +29,14 @@ TA_DIR = Path('/vendor/firmware_mnt/image')
 
 BINARIES = {'bin/linker64': 'system/bin/bootstrap/linker64',
             'bin/sec_nvm': 'vendor/bin/sec_nvm',
-            'bin/spdaemon': 'vendor/bin/spdaemon'}
-TA_SEGMENTS = [f'dualfp.b{i:02d}' for i in range(9)] + ['dualfp.mdt']
+            'bin/spdaemon': 'vendor/bin/spdaemon',
+            # This vendor's spdaemon waits for a context manager on
+            # /dev/vndbinder before it starts the SPU.
+            'bin/vndservicemanager': 'vendor/bin/vndservicemanager'}
+# Trusted apps the EL721 bridge loads: dualfp (the matcher), hwvault (template
+# keys, restored from the K250A) and skeymast (gatekeeper / HAT key).
+TA_SEGMENTS = [f'{ta}.{seg}' for ta in ('dualfp', 'hwvault', 'skeymast')
+               for seg in [f'b{i:02d}' for i in range(9)] + ['mdt']]
 # The SPSS firmware qcom_spss requests as spss1p.mdt (the supervisor points
 # the firmware loader at FIRMWARE before loading the module).
 TA_SEGMENTS += [f'spss1p.b{i:02d}' for i in range(3)] + ['spss1p.mdt']
@@ -76,7 +82,8 @@ def sources(system):
     files = {dst: base[src.split('/')[0]] / src.split('/', 1)[1]
              for dst, src in BINARIES.items()}
     search = [VENDOR / 'lib64', system / 'lib64/bootstrap', system / 'lib64']
-    todo = [files['bin/sec_nvm'], files['bin/spdaemon']]
+    todo = [files['bin/sec_nvm'], files['bin/spdaemon'],
+            files['bin/vndservicemanager']]
     while todo:
         for name in needed(todo.pop()):
             dst = f'lib64/{name}'
@@ -94,8 +101,12 @@ def sources(system):
 
 def copy(src, dst, mode):
     dst.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    shutil.copyfile(src, dst)
-    os.chmod(dst, mode)
+    # Write beside and rename: a running daemon's file cannot be rewritten
+    # in place (ETXTBSY), and a reader never sees a half-copied file.
+    tmp = dst.with_name(dst.name + '.new')
+    shutil.copyfile(src, tmp)
+    os.chmod(tmp, mode)
+    os.replace(tmp, dst)
     return hashlib.sha256(dst.read_bytes()).hexdigest()
 
 
