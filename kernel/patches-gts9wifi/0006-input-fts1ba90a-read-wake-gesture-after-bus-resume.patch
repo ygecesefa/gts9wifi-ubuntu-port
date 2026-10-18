@@ -1,0 +1,88 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] Input: fts1ba90a: read the wake gesture after the bus resumes
+
+The double-tap IRQ wakes the system and its thread runs while the geni
+i2c controller is still suspended: every read fails with -EACCES
+("error turning SE resources") and the level IRQ fires again at once,
+~130 errors per wake until the controller resumes.  Those errors were
+flushed to ttyMSM0 before tasks thawed and held the screen back ~0.9 s
+(console_resume_all), and the storm burns CPU on every wake.
+
+While suspended in low-power mode, mark the wake, keep the system awake
+and disable the IRQ; the resume callback (after the i2c parent) reads the
+gesture frame, reports KEY_WAKEUP and re-enables the IRQ.
+
+---
+--- a/drivers/input/touchscreen/fts1ba90a.c	2026-10-18 23:11:23.015898415 +0300
++++ b/drivers/input/touchscreen/fts1ba90a.c	2026-10-18 23:11:23.053136543 +0300
+@@ -105,6 +105,7 @@
+ 	struct regulator *vddio;
+ 	bool dtw_enabled;	/* user toggle; the gesture is armed per suspend */
+ 	bool lpm_suspended;	/* suspended with rails up and the gesture armed */
++	bool wake_pending;	/* gesture IRQ arrived before the bus resumed */
+ 	u8 events[FTS_FIFO_MAX * FTS_EVENT_SIZE];
+ };
+ 
+@@ -461,15 +462,38 @@
+ 	dev_info(&ts->client->dev, "double tap to wake\n");
+ }
+ 
++static void fts1ba90a_read_events(struct fts1ba90a *ts);
++
+ static irqreturn_t fts1ba90a_irq_handler(int irq, void *dev_id)
+ {
+ 	struct fts1ba90a *ts = dev_id;
++
++	/*
++	 * A wake gesture fires the IRQ while the system is still resuming and
++	 * the i2c controller is not usable yet (-EACCES on every try, and the
++	 * level IRQ fires again at once).  Hold the IRQ off and let resume read
++	 * the frame.
++	 */
++	if (ts->lpm_suspended) {
++		ts->wake_pending = true;
++		disable_irq_nosync(irq);
++		pm_wakeup_event(&ts->client->dev, 200);
++		return IRQ_HANDLED;
++	}
++
++	fts1ba90a_read_events(ts);
++
++	return IRQ_HANDLED;
++}
++
++static void fts1ba90a_read_events(struct fts1ba90a *ts)
++{
+ 	u8 cmd = FTS_READ_ONE_EVENT;
+ 	int count, i, ret;
+ 
+ 	ret = fts1ba90a_read(ts, &cmd, 1, ts->events, FTS_EVENT_SIZE);
+ 	if (ret)
+-		return IRQ_HANDLED;
++		return;
+ 
+ 	/* remaining FIFO depth rides in byte 7 of every event */
+ 	count = (ts->events[7] & 0x3f) + 1;
+@@ -504,8 +528,6 @@
+ 		input_mt_sync_frame(ts->input);
+ 		input_sync(ts->input);
+ 	}
+-
+-	return IRQ_HANDLED;
+ }
+ 
+ static void fts1ba90a_report_version(struct fts1ba90a *ts)
+@@ -714,6 +736,13 @@
+ 
+ 		disable_irq_wake(ts->client->irq);
+ 
++		/* The bus is up now: report the gesture before leaving LPM. */
++		if (ts->wake_pending) {
++			ts->wake_pending = false;
++			fts1ba90a_read_events(ts);
++			enable_irq(ts->client->irq);
++		}
++
+ 		ret = fts1ba90a_disarm_gesture(ts);
+ 		if (ret) {
+ 			/*

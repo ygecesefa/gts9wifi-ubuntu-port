@@ -1,0 +1,26 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] wifi: ath11k: keep the WCN6855 powered over suspend on the Tab S9
+
+Without a DMI quirk ath11k powers the chip down in suspend_late and
+powers it up (MHI + firmware boot) in resume_early.  On the X710 that is
+1.14 s of resume_early plus 0.41 s of resume, almost all of the 1.63 s
+the kernel needs to resume, so the screen comes on seconds after a power
+key press or a double tap.  Use the WoW path the Lenovo quirks already
+use (target suspend, the chip stays powered) on samsung,gts9wifi.
+
+---
+--- a/drivers/net/wireless/ath/ath11k/core.c	2026-10-18 22:58:30.762274019 +0300
++++ b/drivers/net/wireless/ath/ath11k/core.c	2026-10-18 22:58:30.763464668 +0300
+@@ -2691,6 +2691,12 @@
+ 	dmi_id = dmi_first_match(ath11k_pm_quirk_table);
+ 	if (dmi_id)
+ 		ab->pm_policy = (kernel_ulong_t)dmi_id->driver_data;
++	/* Galaxy Tab S9 (X710): powering the WCN6855 down and booting its
++	 * firmware again takes 1.5 s of every resume, which delays the
++	 * screen coming back on after a power key press or a double tap.
++	 */
++	else if (of_machine_is_compatible("samsung,gts9wifi"))
++		ab->pm_policy = ATH11K_PM_WOW;
+ 	else
+ 		ab->pm_policy = ATH11K_PM_DEFAULT;
+ 

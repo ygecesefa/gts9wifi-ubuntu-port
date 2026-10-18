@@ -1,0 +1,12 @@
+# gts9wifi device defaults.
+#
+# Enable the device-controls extension (double tap to wake, fast charging).
+# The Ubuntu mode keeps its own extensions (dock, appindicators, ding, tiling)
+# separately, so this does not disable them.
+[org.gnome.shell]
+enabled-extensions=['gnome-gts9wifi@tabs9linux']
+
+# A short press of the power key suspends, as on Android; the shutdown dialog
+# stays one tap away in the top-right menu.
+[org.gnome.settings-daemon.plugins.power]
+power-button-action='suspend'
