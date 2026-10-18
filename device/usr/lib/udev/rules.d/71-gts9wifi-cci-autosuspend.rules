@@ -1,0 +1,9 @@
+# gts9wifi: let the camera CCI I2C controllers runtime-suspend immediately.
+#
+# With the default 1 s autosuspend the controller stays active across a quick
+# sensor stop/start (GNOME Snapshot taking a picture).  The camera GDSC then
+# never collapses while the sensor rail is down, and the controller ends up
+# stuck on its next WRITE command (no bus activity, no interrupt, not even a
+# halt is acknowledged) until the GDSC is power-cycled.  Suspending at once
+# lets the GDSC drop with the sensor, so every start finds a fresh controller.
+ACTION=="add|bind", SUBSYSTEM=="platform", KERNEL=="ac15000.cci|ac16000.cci", ATTR{power/autosuspend_delay_ms}="0"
