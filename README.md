@@ -63,7 +63,8 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | S Pen (WEZ01) | ✅ | position, pressure 0–4095, hover distance, **tilt X/Y** (measured −29…+35) |
 | Cameras (2× HI1337, DW9808 lens) | 🟡 | sensors and lens probe, CAMSS graph up; no app support until libcamera (stage B) |
 | Rear camera autofocus | — | lens controllable (focus_absolute 0–1023); AF loop comes with the Ultra libcamera (stage B) |
-| Hardware video decode | 🟡 | iris decoder up (`/dev/video17/18`), GStreamer `v4l2h264dec`/`v4l2vp9dec` present; playback test pending. Vulkan Video does not exist for Adreno on Linux |
+| Hardware video decode | ✅ | iris VPU: H.264, HEVC, VP9 1080p, 300/300 frames, ~10–15× less CPU than software; GStreamer picks it automatically (GNOME Videos/Totem). Browsers still decode in software (no VA-API for the VPU) |
+| Hardware video encode | ✅ | iris VPU: H.264 and HEVC 1080p at ~170–300 fps (`v4l2h264enc`/`v4l2h265enc`) |
 | Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
 | Rotation sensor | — | planned (stage B: hexagonrpcd, libssc) |
 | Fingerprint | — | |

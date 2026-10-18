@@ -70,7 +70,7 @@ pipewire,pipewire-pulse,pipewire-audio,wireplumber,
 pulseaudio-utils,
 libspa-0.2-bluetooth,bluez,alsa-ucm-conf,alsa-utils,
 iio-sensor-proxy,upower,power-profiles-daemon,
-gstreamer1.0-plugins-good,gstreamer1.0-plugins-bad,
+gstreamer1.0-plugins-good,gstreamer1.0-plugins-bad,totem,
 fonts-ubuntu,fonts-noto-color-emoji,
 language-pack-tr,language-pack-gnome-tr,language-pack-en,
 gnome-software,gnome-software-plugin-snap
