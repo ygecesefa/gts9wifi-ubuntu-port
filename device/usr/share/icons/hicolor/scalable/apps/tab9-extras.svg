@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Tab9 Extras: a tablet in landscape showing settings sliders, Yaru-style colours -->
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3d6fd9"/>
+      <stop offset="0.55" stop-color="#7b4fd6"/>
+      <stop offset="1" stop-color="#e95420"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="22" width="112" height="80" rx="10" fill="#2b2b2b"/>
+  <rect x="13.5" y="27.5" width="101" height="69" rx="5.5" fill="url(#screen)"/>
+  <circle cx="64" cy="24.8" r="1.4" fill="#5a5a5a"/>
+  <g stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity="0.95">
+    <line x1="36" y1="46" x2="92" y2="46"/>
+    <line x1="36" y1="62" x2="92" y2="62"/>
+    <line x1="36" y1="78" x2="92" y2="78"/>
+  </g>
+  <g fill="#fff" stroke="#2b2b2b" stroke-width="2">
+    <circle cx="74" cy="46" r="6.5"/>
+    <circle cx="50" cy="62" r="6.5"/>
+    <circle cx="82" cy="78" r="6.5"/>
+  </g>
+</svg>

@@ -39,6 +39,11 @@ git -C "$kernel_git" archive "$commit" | tar -x -C "$tree"
 echo "== 2/5 Fedora gts9wifi recipe (patches, drivers, DTS, base config)"
 bash "$fedora/kernel/prepare.sh" "$tree" > "$work/prepare.log" 2>&1 || {
 	tail -40 "$work/prepare.log" >&2; exit 1; }
+# prepare.sh registers its drivers with echo 'obj-$(CONFIG_X)\t+= x.o'; bash's
+# echo writes the \t literally, make then never sees obj-m for them, and the
+# eight fingerprint/SPU modules (EL721, K250A, SPSS, SPCOM, ...) were silently
+# not built although .config says =m.  Turn the literal \t into a tab.
+grep -rlF '\t+=' --include=Makefile "$tree/drivers" | xargs -r sed -i 's/\\t+=/\t+=/'
 if grep -qE 'FAILED|Reversed \(or previously applied\)|\.rej' "$work/prepare.log"; then
 	grep -nE 'FAILED|Reversed|\.rej' "$work/prepare.log" >&2
 	echo "a patch did not apply cleanly on $tag" >&2
