@@ -42,21 +42,31 @@
 | Linux 7.2.1–7.2.6 break Wi-Fi | kernel pinned to 7.2.0; Wi-Fi works |
 | Weak 5 GHz (Fedora issue 7, marked fixed there) | the Fedora fix targets the wrong board-data entry for this unit; fixed here |
 
-## Roadmap
+## Work queue (ordered)
 
-1. **v0.2.0-alpha1** — first boot from microSD (stage A rootfs).
-2. **Stage B userspace** — the S9 Ultra port's rebuilt packages adapted to the
-   gts9wifi: libcamera with autofocus, `hexagonrpcd`/`libssc`/`iio-sensor-proxy`
-   (rotation), mutter, gnome-settings-daemon.
-3. **Ultra SoC improvements** — device-independent SM8550 patches, one at a time.
-4. **S Pen tilt, charging bypass, `/vendor`**.
-5. **TWRP** — a working recovery for the gts9wifi (rainbowdashh V2 and the
-   correct flashing procedure), then a **TWRP installer ZIP** that asks where to
-   install, based on the S9 Ultra port's `make-twrp-zip.py`,
-   `build-ufs-image.sh` and `make-repartition-zip.py`:
-   - **microSD** — as today, Android untouched
-   - **internal storage, beside Android** — a `linuxroot` partition carved from `userdata`
-   - **whole tablet** — Ubuntu on the internal storage only
+Live items are installed on the running tablet over SSH and need no new image;
+items that need a new kernel or image come last, because each image cycle
+(build ~3 h on the Pi, write, boot) is long. Everything live is folded into the
+next image afterwards.
+
+| # | Item | Origin | Needs |
+|---|---|---|---|
+| 1 | Bluetooth public address from `efs` at boot, without rewriting boot partitions | this port | live |
+| 2 | Hardware video decode: verify iris H.264/VP9/HEVC through GStreamer, set up a player (Celluloid/mpv) to use it; browsers stay software (no VA-API for the VPU) | Fedora 16 | live |
+| 3 | Rotation sensor: `hexagonrpcd`, `libssc`, patched `iio-sensor-proxy` | Fedora 5 | live (packages) |
+| 4 | Cameras in apps + **rear autofocus**: S9 Ultra libcamera (software ISP, AF) with gts9wifi tuning for the two HI1337, `v4l2-relayd` | Fedora 4/4b/11 | live (packages) |
+| 5 | Double-tap to wake + device-control GNOME extension (port to GNOME 46) | Fedora 14 | live |
+| 6 | `/vendor` (Android `super`) mounted read-only via dm-linear | Fedora open | live |
+| 7 | Check file capabilities, early-boot clock, ADSP late-start safety | Fedora open | live |
+| 8 | Under-display fingerprint (EL721) — blocked on Fedora at `KEYMASTER_NOT_CONFIGURED` | Fedora 15 | live, large |
+| 9 | **Charging bypass**: `charge_types` (Standard/Bypass) in the SM5714 driver (stock `ovp_bypass_mode` + two register writes) and a toggle | Fedora 13 | **kernel** + live UI |
+| 10 | Reclaim ~812 MiB of dead carveouts in the DTB at build time (replaces `gts9wifi-mem-reclaim`) | this port | **kernel/bundle** |
+| 11 | Device-independent S9 Ultra SoC patches, one at a time | S9 Ultra | **kernel** |
+| 12 | Image `v0.2.0-pre2`: everything above + 5 GHz fix + one-tap switches | — | **image** |
+| 13 | TWRP, then the TWRP installer ZIP (microSD / beside Android / whole tablet) | owner | **image**, last |
+
+Not applicable on Ubuntu: SELinux permissive (AppArmor is used and enabled).
+Already resolved here: S Pen tilt, weak 5 GHz, 7.2.1–7.2.6 Wi-Fi, two-way dual boot.
 
 ## Lessons from v0.1.0-alpha1
 
