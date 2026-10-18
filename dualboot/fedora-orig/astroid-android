@@ -1,0 +1,1 @@
+fedora ALL=(root) NOPASSWD: /usr/local/sbin/astroid-to-android

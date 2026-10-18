@@ -1,0 +1,64 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+BASE="/home/fedora/dualboot/android"
+PARTS="/dev/disk/by-partlabel"
+
+declare -A EXPECTED=(
+  [boot]=100663296
+  [init_boot]=8388608
+  [vendor_boot]=100663296
+  [dtbo]=16777216
+)
+
+echo "ASTROID: Fedora -> Android"
+echo "Hedef: Samsung Galaxy Tab S9 Wi-Fi (gts9wifi)"
+echo
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Hata: Bu betik root yetkisiyle çalıştırılmalı."
+    exit 1
+fi
+
+for name in boot init_boot vendor_boot dtbo; do
+    img="$BASE/$name.img"
+    dev="$PARTS/$name"
+
+    [[ -f "$img" ]] || {
+        echo "Eksik imaj: $img"
+        exit 1
+    }
+
+    [[ -b "$dev" ]] || {
+        echo "Bölüm bulunamadı: $dev"
+        exit 1
+    }
+
+    image_size=$(stat -c '%s' "$img")
+    partition_size=$(blockdev --getsize64 "$dev")
+
+    [[ "$image_size" -eq "${EXPECTED[$name]}" ]] || {
+        echo "İmaj boyutu hatalı: $img ($image_size)"
+        exit 1
+    }
+
+    [[ "$partition_size" -eq "${EXPECTED[$name]}" ]] || {
+        echo "Bölüm boyutu beklenenden farklı: $dev ($partition_size)"
+        exit 1
+    }
+
+    echo "Kontrol OK: $name ($image_size bayt)"
+done
+
+echo
+echo "Dört Android önyükleme imajı yazılacak."
+
+for name in boot init_boot vendor_boot dtbo; do
+    echo "Yazılıyor: $name"
+    dd if="$BASE/$name.img" of="$PARTS/$name" \
+       bs=4M iflag=fullblock conv=fsync status=progress
+done
+
+sync
+echo "Yazma tamamlandı; yeniden başlatılıyor."
+systemctl reboot

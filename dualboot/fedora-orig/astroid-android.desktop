@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Android'e Geç
+Comment=Android önyükleme imajlarını geri yükle ve yeniden başlat
+Exec=sudo -n /usr/local/sbin/astroid-to-android
+Icon=system-reboot
+Terminal=true
+Categories=System;
