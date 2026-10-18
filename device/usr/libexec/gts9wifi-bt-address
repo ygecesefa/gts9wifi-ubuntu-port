@@ -1,0 +1,46 @@
+#!/bin/bash
+# Give the WCN6855 its unit-specific Bluetooth address.
+#
+# The address lives in Samsung's EFS (bluetooth/bt_addr).  hci_qca registers
+# the controller as unconfigured because the generic DTB carries none, so it
+# comes up "DOWN RAW" with a placeholder address.  Set the address through the
+# management interface instead of patching it into the DTB inside the boot
+# partitions (what the Fedora port's gts9wifi-bt-provision does on every
+# boot): EFS is only ever mounted read-only and nothing on disk is written.
+#
+# Triggered by udev whenever hci0 appears, so it also covers re-registration
+# after suspend or a Bluetooth recovery.
+set -euo pipefail
+
+EFS=/dev/disk/by-partlabel/efs
+
+# btmgmt waits for input when it has no terminal; bound every call.
+mgmt() { timeout 20 btmgmt -i hci0 --timeout 5 "$@" </dev/null; }
+
+for _ in $(seq 1 30); do
+	[ -e /sys/class/bluetooth/hci0 ] && break
+	sleep 1
+done
+
+mnt=$(mktemp -d /run/gts9wifi-efs.XXXXXX)
+trap 'umount "$mnt" 2>/dev/null || true; rmdir "$mnt"' EXIT
+mount -o ro,noload "$EFS" "$mnt"
+addr=$(tr -d '\r\n ' < "$mnt/bluetooth/bt_addr")
+umount "$mnt"
+
+if ! [[ $addr =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]] || [ "$addr" = 00:00:00:00:00:00 ]; then
+	echo "invalid Bluetooth address in EFS" >&2
+	exit 1
+fi
+
+# udev fires when hci0 registers, before hci_qca has finished downloading the
+# firmware; the controller ignores mgmt until then, so retry.
+current() { hciconfig hci0 2>/dev/null | awk '/BD Address/{print toupper($3)}'; }
+for _ in $(seq 1 30); do
+	[ "$(current)" = "${addr^^}" ] && break
+	mgmt public-addr "$addr" >/dev/null 2>&1 || true
+	sleep 2
+done
+[ "$(current)" = "${addr^^}" ] || { echo "controller did not accept the address" >&2; exit 1; }
+mgmt power on >/dev/null || true
+echo "hci0 address set from EFS (…${addr: -5})"

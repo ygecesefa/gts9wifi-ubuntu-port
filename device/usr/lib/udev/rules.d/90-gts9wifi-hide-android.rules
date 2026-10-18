@@ -1,0 +1,8 @@
+# Hide the tablet's internal UFS (Android: sda..sdf, ~90 partitions including
+# efs, persist, modem and the FBE-encrypted userdata) and Ubuntu's own boot
+# partition from GNOME/udisks, so none of them appear in the dock or Files
+# and none can be mounted by a click.  The system mounts it needs
+# (/vendor/dsp, /vendor/firmware_mnt, /mnt/vendor/persist) are systemd units
+# and are not affected.
+SUBSYSTEM=="block", KERNEL=="sd[a-f]*", ENV{UDISKS_IGNORE}="1"
+SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="GTS9W_BOOT", ENV{UDISKS_IGNORE}="1"

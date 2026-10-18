@@ -1,0 +1,3 @@
+# Set the unit-specific Bluetooth address whenever the WCN6855 controller
+# registers (boot, re-registration after suspend or recovery).
+ACTION=="add", SUBSYSTEM=="bluetooth", KERNEL=="hci0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="gts9wifi-bt-address.service"
