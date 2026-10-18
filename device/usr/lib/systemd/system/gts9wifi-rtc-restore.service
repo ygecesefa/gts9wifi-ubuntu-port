@@ -2,7 +2,11 @@
 Description=Set the clock from the PMIC RTC and the saved offset
 Documentation=file:///usr/libexec/gts9wifi-rtc-offset
 DefaultDependencies=no
-After=systemd-remount-fs.service
+# Before journald: with the clock still at 1970 its runtime-journal flush
+# saw time jump backwards, rotated, and the 1970-dated file was the first
+# one vacuumed, losing the first ~50 s of every boot's log.  The root
+# filesystem is already mounted read-write by the initramfs.
+Before=systemd-journald.service systemd-journal-flush.service
 Before=systemd-timesyncd.service time-set.target sysinit.target shutdown.target
 Conflicts=shutdown.target
 ConditionPathExists=/sys/class/rtc/rtc0/since_epoch
