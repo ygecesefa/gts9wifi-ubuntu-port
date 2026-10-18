@@ -63,7 +63,8 @@ next image afterwards.
 | 10 | Reclaim ~812 MiB of dead carveouts in the DTB at build time (replaces `gts9wifi-mem-reclaim`) | this port | **kernel/bundle** |
 | 11 | Device-independent S9 Ultra SoC patches, one at a time | S9 Ultra | **kernel** |
 | 12 | Image `v0.2.0-pre2`: everything above + 5 GHz fix + one-tap switches | — | **image** |
-| 13 | TWRP, then the TWRP installer ZIP (microSD / beside Android / whole tablet) | owner | **image**, last |
+| 13 | **Boot-time choice with the keys**: Ubuntu in the `recovery` partition, so a normal boot starts Android and *Volume Up + Power* starts Ubuntu (no image swapping). Open questions: ABL's use of the shared `dtbo` on a recovery boot, and losing the custom recovery as rescue path. Alternative: hold *Volume Down* during Ubuntu's initramfs to switch to Android | owner | **image**, experiment |
+| 14 | TWRP, then the TWRP installer ZIP (microSD / beside Android / whole tablet) | owner | **image**, last |
 
 Not applicable on Ubuntu: SELinux permissive (AppArmor is used and enabled).
 Already resolved here: S Pen tilt, weak 5 GHz, 7.2.1–7.2.6 Wi-Fi, two-way dual boot.
