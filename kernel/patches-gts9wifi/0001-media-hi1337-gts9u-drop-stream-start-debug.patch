@@ -1,0 +1,64 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] media: hi1337-gts9u: drop stream-start debug reads and 500 ms sleep
+
+The X710 driver carried bring-up debugging in hi1337_start_streaming():
+three register reads after the mode tables, two after stream-on and a
+msleep(500) between them, all logged at info level.  Every stream start
+took ~0.8 s.  Applications that reconfigure the camera (GNOME Snapshot
+opens, reconfigures and restarts within a second) then start the sensor
+again while the previous start is still sleeping; on the rear sensor
+that ended in a CCI timeout ("master 1 queue 0 timeout", -110 writing
+0x0790), a failed STREAMON and an unresponsive camera.
+
+The S9 Ultra version of this driver has no such block.  Behaviour is
+otherwise unchanged; the lens binding the X710 version adds is kept.
+---
+--- a/drivers/media/i2c/hi1337_gts9u.c	2026-10-18 05:08:54.327501182 +0300
++++ b/drivers/media/i2c/hi1337_gts9u.c	2026-10-18 05:08:54.342662112 +0300
+@@ -373,12 +373,8 @@
+ static int hi1337_start_streaming(struct hi1337 *sensor)
+ {
+ 	const struct hi1337_mode *mode = &sensor->variant->mode;
+-	u16 dbg_val = 0;
+ 	int ret;
+ 
+-	dev_info(sensor->dev, "DBG: start_streaming %s (%ux%u)\n",
+-		 mode->name, mode->width, mode->height);
+-
+ 	ret = hi1337_write_table(sensor, hi1337_global_regs,
+ 				 ARRAY_SIZE(hi1337_global_regs));
+ 	if (ret)
+@@ -387,17 +383,6 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	/* DBG: confirm what the sensor actually reads back after the tables. */
+-	ret = hi1337_read_reg(sensor, HI1337_REG_MODE_SELECT, &dbg_val);
+-	dev_info(sensor->dev, "DBG: after tables MODE_SELECT=0x%04x (r=%d)\n",
+-		 dbg_val, ret);
+-	ret = hi1337_read_reg(sensor, HI1337_REG_MODEL_ID, &dbg_val);
+-	dev_info(sensor->dev, "DBG: after tables MODEL_ID=0x%04x (r=%d)\n",
+-		 dbg_val, ret);
+-	ret = hi1337_read_reg(sensor, HI1337_REG_FRAME_LENGTH, &dbg_val);
+-	dev_info(sensor->dev, "DBG: after tables FRAME_LENGTH=0x%04x (r=%d)\n",
+-		 dbg_val, ret);
+-
+ 	sensor->streaming = true;
+ 	ret = __v4l2_ctrl_handler_setup(&sensor->ctrl_handler);
+ 	if (ret)
+@@ -406,15 +391,6 @@
+ 			       HI1337_MODE_STREAMING);
+ 	if (ret)
+ 		goto clear_streaming;
+-
+-	/* DBG: prove the stream-on write stuck. */
+-	ret = hi1337_read_reg(sensor, HI1337_REG_MODE_SELECT, &dbg_val);
+-	dev_info(sensor->dev, "DBG: after stream-on MODE_SELECT=0x%04x (r=%d)\n",
+-		 dbg_val, ret);
+-	msleep(500);
+-	ret = hi1337_read_reg(sensor, HI1337_REG_MODE_SELECT, &dbg_val);
+-	dev_info(sensor->dev, "DBG: 500ms later MODE_SELECT=0x%04x (r=%d)\n",
+-		 dbg_val, ret);
+ 	return 0;
+ 
+ clear_streaming:

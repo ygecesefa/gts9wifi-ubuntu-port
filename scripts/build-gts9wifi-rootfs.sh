@@ -39,7 +39,8 @@ password=${GTS9WIFI_PW:?set GTS9WIFI_PW to the test user password}
 [ "$(id -u)" = 0 ] || { echo 'run as root' >&2; exit 1; }
 krel=$(cat "$kernel_out/kernel.release")
 for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/rootfs/overlay" "$sensor_tree" \
-	"$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb; do
+	"$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb \
+	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb; do
 	test -e "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 case "$rootfs" in
@@ -166,9 +167,10 @@ apt_in_rootfs() {
 	for d in dev sys proc; do umount "$rootfs/$d"; done
 }
 
-echo "== sensor packages (libssc, hexagonrpcd, iio-sensor-proxy)"
+echo "== local packages: sensors (libssc, hexagonrpcd, iio-sensor-proxy), cameras (libcamera + PipeWire SPA)"
 mkdir -p "$rootfs/tmp/gts9wifi-debs"
-cp "$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb "$rootfs/tmp/gts9wifi-debs/"
+cp "$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb \
+	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb "$rootfs/tmp/gts9wifi-debs/"
 apt_in_rootfs /tmp/gts9wifi-debs/*.deb
 rm -rf "$rootfs/tmp/gts9wifi-debs"
 

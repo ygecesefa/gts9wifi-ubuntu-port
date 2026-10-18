@@ -1,0 +1,5 @@
+# libcamera's software ISP allocates frame buffers through /dev/udmabuf, which
+# the kernel creates as root:kvm.  Hand it to video (the desktop user is a
+# member) and let logind grant the active session an ACL as well.
+# (From the S9 Ultra port's 70-gts9u-camera.rules.)
+SUBSYSTEM=="misc", KERNEL=="udmabuf", GROUP="video", MODE="0660", TAG+="uaccess"

@@ -43,6 +43,14 @@ if grep -qE 'FAILED|Reversed \(or previously applied\)|\.rej' "$work/prepare.log
 	exit 1
 fi
 
+# This port's own fixes on top of the Fedora recipe, in order.
+for p in "$repo"/kernel/patches-gts9wifi/*.patch; do
+	[ -e "$p" ] || continue
+	echo "   patch: ${p##*/}"
+	patch -d "$tree" -p1 --forward --no-backup-if-mismatch < "$p" >> "$work/prepare.log" 2>&1 || {
+		echo "patch failed: $p" >&2; exit 1; }
+done
+
 echo "== 3/5 Ubuntu userspace fragment"
 cd "$tree"
 scripts/kconfig/merge_config.sh -m .config \

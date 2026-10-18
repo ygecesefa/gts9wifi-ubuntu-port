@@ -141,3 +141,32 @@ The superseded v0.1.0-alpha1 (never booted) and its artifacts were removed:
 its GitHub release and tag, the `legacy/hermes-v0.1` branch, and the local
 build outputs. Its lessons stay in this log. The agent's own session records
 were kept untouched.
+
+## 2026-10-18 (night) — cameras
+
+- Built the S9 Ultra port's camera packages unchanged (`build-camera-packages.sh`):
+  libcamera 0.7.2 + 7 patches (soft ISP, software autofocus) and the PipeWire
+  libcamera SPA. The tuning is selected by sensor name and the X710 sensors bind
+  as `hi1337-gts9u`, so `hi1337-gts9u.yaml` applies as is.
+- `cam -l` lists the front (`cci@ac16000`) and rear (`cci@ac15000`) cameras.
+  The soft ISP first failed with "Could not open any dma-buf provider":
+  `/dev/udmabuf` is root:kvm. `70-gts9wifi-camera.rules` hands it to `video`
+  (+uaccess). Then both stream at 30 fps (front 3400×2556, rear 4120×3096);
+  the rear AF moved the DW9808 from 384 to 288.
+- WirePlumber offered 16 raw CAMSS nodes and the VPU next to the two cameras;
+  `51-gts9wifi-cameras.lua` disables them and names the cameras
+  "Front Camera" / "Rear Camera". GNOME Snapshot showed both.
+- Snapshot then hung on the rear camera: it restarts the stream within a
+  second, and the X710 HI1337 driver still carried bring-up debugging in
+  `start_streaming` (register reads + `msleep(500)`). The overlapping start
+  ended in a CCI timeout (`-110` writing 0x0790) and a failed STREAMON.
+  `kernel/patches-gts9wifi/0001-…drop-stream-start-debug.patch` removes it
+  (the S9 Ultra driver has no such block); the build script applies this
+  directory after the Fedora recipe.
+- **Mistake:** the fix was deployed as an incremental kernel rebuild (new
+  `boot.img`, sha `896d3a97…`) without rebuilding the modules. With
+  `CONFIG_DEBUG_INFO_BTF_MODULES=y` and no `MODULE_ALLOW_BTF_MISMATCH`, every
+  module built against the old vmlinux is rejected, so `ath11k` (Wi-Fi) did not
+  load. Rule from now on: **a new kernel image always ships with the modules
+  rebuilt from the same tree**, installed in the rootfs and the initramfs.
+  Modules rebuilt; to be installed on the tablet over the USB network.

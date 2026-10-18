@@ -54,16 +54,18 @@ next image afterwards.
 | 1 | ~~Bluetooth public address from `efs` at boot~~ — **done** (`gts9wifi-bt-address` + `gts9wifi-bt-mgmt`), plus NTP (`systemd-timesyncd`) | this port | live |
 | 2 | ~~Hardware video decode~~ — **done**: iris decodes H.264/HEVC/VP9 and encodes H.264/HEVC; GStreamer ranks it first so Totem uses it with no setup. Open: browsers (no VA-API for the VPU), mpv/VLC configuration | Fedora 16 | live |
 | 3 | ~~Rotation sensor~~ — **done**: accelerometer, ambient light and compass; sensor PD started once per boot after the ADSP and the panel cold-boot recovery (the race that hung Fedora), iio-sensor-proxy waits for SSC | Fedora 5 | live (packages) |
-| 4 | Cameras in apps + **rear autofocus**: S9 Ultra libcamera (software ISP, AF) with gts9wifi tuning for the two HI1337, `v4l2-relayd` | Fedora 4/4b/11 | live (packages) |
+| 4 | Cameras in apps + **rear autofocus** — **in progress**: both cameras stream through libcamera/PipeWire, Snapshot works; stream-restart hang fixed in the HI1337 driver; AF behaviour to confirm | Fedora 4/4b/11 | live (packages) + kernel fix |
 | 5 | Double-tap to wake + device-control GNOME extension (port to GNOME 46) | Fedora 14 | live |
 | 6 | ~~`/vendor`~~ — **done**: `gts9wifi-android-parts` parses super's liblp metadata, maps `vendor` read-only with dm-linear; mounted `ro,noload`. Also fixed: `dsp` and `persist` were mounted without `noload`, so a dirty journal would have been replayed onto the Android partitions | Fedora open | live |
 | 7 | Check file capabilities, early-boot clock, ADSP late-start safety | Fedora open | live |
+| 7b | **Waydroid** (Android apps in Ubuntu): binder/netfilter already in the kernel; install Waydroid 1.6 + LineageOS 20 GAPPS image as the S9 Ultra port does (`docs/waydroid.md`) | owner | live |
 | 8 | Under-display fingerprint (EL721) — blocked on Fedora at `KEYMASTER_NOT_CONFIGURED` | Fedora 15 | live, large |
 | 9 | **Charging bypass**: `charge_types` (Standard/Bypass) in the SM5714 driver (stock `ovp_bypass_mode` + two register writes) and a toggle | Fedora 13 | **kernel** + live UI |
 | 10 | Reclaim ~812 MiB of dead carveouts in the DTB at build time (replaces `gts9wifi-mem-reclaim`) | this port | **kernel/bundle** |
 | 11 | Device-independent S9 Ultra SoC patches, one at a time | S9 Ultra | **kernel** |
 | 12 | Image `v0.2.0-pre2`: everything above + 5 GHz fix + one-tap switches | — | **image** |
 | 13 | **Boot-time choice with the keys**: Ubuntu in the `recovery` partition, so a normal boot starts Android and *Volume Up + Power* starts Ubuntu (no image swapping). Open questions: ABL's use of the shared `dtbo` on a recovery boot, and losing the custom recovery as rescue path. Alternative: hold *Volume Down* during Ubuntu's initramfs to switch to Android | owner | **image**, experiment |
+| 13b | **A working TWRP first**: rainbowdashh V2 cannot mount `/data`, `system` etc.; the fstab/flags edits of v0.1 did not help. Root-cause and build a fixed TWRP (and settle the Odin/vbmeta flashing) before any installer ZIP | owner | **image** |
 | 14 | TWRP, then the TWRP installer ZIP (microSD / beside Android / whole tablet) | owner | **image**, last |
 
 Not applicable on Ubuntu: SELinux permissive (AppArmor is used and enabled).
