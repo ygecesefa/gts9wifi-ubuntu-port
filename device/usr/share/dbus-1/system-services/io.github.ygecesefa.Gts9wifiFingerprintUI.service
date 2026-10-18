@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=io.github.ygecesefa.Gts9wifiFingerprintUI
+Exec=/usr/libexec/gts9wifi-fingerprint-ui
+User=root
+SystemdService=gts9wifi-fingerprint-ui.service

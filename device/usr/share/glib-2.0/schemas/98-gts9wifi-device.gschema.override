@@ -1,10 +1,11 @@
 # gts9wifi device defaults.
 #
-# Enable the device-controls extension (double tap to wake, fast charging).
+# Enable the device-controls extension (Tab9 Extras) and the fingerprint
+# overlay (target and light for the under-display reader).
 # The Ubuntu mode keeps its own extensions (dock, appindicators, ding, tiling)
 # separately, so this does not disable them.
 [org.gnome.shell]
-enabled-extensions=['gnome-gts9wifi@tabs9linux']
+enabled-extensions=['gnome-gts9wifi@tabs9linux', 'gts9wifi-fingerprint-overlay@tabs9linux']
 
 # The power key is handled by gts9wifi-power-key (short press suspends, long
 # press opens the power menu, as on Android); GNOME acts on key-down and would

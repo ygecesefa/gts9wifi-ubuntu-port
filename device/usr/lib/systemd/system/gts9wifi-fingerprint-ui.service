@@ -1,0 +1,25 @@
+[Unit]
+Description=Galaxy Tab fingerprint target availability broker
+After=dbus.service systemd-logind.service
+
+[Service]
+Type=dbus
+BusName=io.github.ygecesefa.Gts9wifiFingerprintUI
+ExecStart=/usr/libexec/gts9wifi-fingerprint-ui
+RuntimeDirectory=gts9wifi-fingerprint-ui
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

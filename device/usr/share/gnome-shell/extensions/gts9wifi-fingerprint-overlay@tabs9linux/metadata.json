@@ -1,0 +1,14 @@
+{
+  "uuid": "gts9wifi-fingerprint-overlay@tabs9linux",
+  "name": "Tab9 fingerprint overlay",
+  "description": "Optical fingerprint target and authentication keyboard integration for the Galaxy Tab S9 (SM-X710); adapted from the S9 Ultra Ubuntu port.",
+  "shell-version": [
+    "46"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog",
+    "gdm"
+  ],
+  "version": 23
+}

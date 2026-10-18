@@ -192,6 +192,10 @@ install -m0755 "$fp_out/gts9wifi-fingerprint-secure-owner" "$fp_out/gts9wifi-bin
 install -d -m0755 "$rootfs/usr/lib/gts9wifi/fingerprint"
 install -m0644 "$fp_out/liblog_capture.so" "$fp_out/libvmmem_shim.so" \
 	"$rootfs/usr/lib/gts9wifi/fingerprint/"
+# The overlay's frame-presented bridge (matched to Mutter 14).
+install -m0644 "$fp_out/libgts9wifi-presented.so" "$rootfs/usr/lib/aarch64-linux-gnu/"
+install -D -m0644 "$fp_out/Gts9wifiPresented-1.0.typelib" \
+	"$rootfs/usr/lib/aarch64-linux-gnu/girepository-1.0/Gts9wifiPresented-1.0.typelib"
 
 if ! chroot "$rootfs" dpkg -s linux-firmware >/dev/null 2>&1; then
 	echo "== installing linux-firmware into the existing rootfs"
@@ -311,6 +315,8 @@ install -m 0755 "$repo/dualboot/gts9wifi-to-android" "$rootfs/usr/local/bin/gts9
 install -m 0644 "$repo/dualboot/gts9wifi-android.desktop" "$rootfs/usr/share/applications/gts9wifi-android.desktop"
 install -m 0644 "$repo/dualboot/99-gts9wifi-android.gschema.override" "$rootfs/usr/share/glib-2.0/schemas/"
 chroot "$rootfs" glib-compile-schemas /usr/share/glib-2.0/schemas/
+# GDM keyfiles in /usr/share/gdm/dconf (fingerprint overlay in the greeter).
+[ -x "$rootfs/usr/share/gdm/generate-config" ] && chroot "$rootfs" /usr/share/gdm/generate-config
 
 for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-panel-coldboot-recover.service gts9wifi-grow-rootfs.service \
@@ -320,6 +326,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
 	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path \
 	gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service \
+	gts9wifi-fingerprint-ui.service \
 	ssh.service NetworkManager.service; do
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done

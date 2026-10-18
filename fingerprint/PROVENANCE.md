@@ -20,3 +20,16 @@ TA and the calibration blobs are copied from the tablet's own partitions at
 install time by `device/usr/libexec/gts9wifi-fingerprint-runtime`.
 `liblog_capture.c` is this port's own (the Ultra port's equivalent is not
 published).
+
+The fingerprint UI chain comes from the same Ultra port commit:
+
+- `device/usr/share/gnome-shell/extensions/gts9wifi-fingerprint-overlay@tabs9linux/`
+  (Ultra: `gts9u-fingerprint-overlay@agcarbajo`, MIT): the optical target,
+  the shade that compensates the panel's global HBM, and the lock-screen/GDM
+  integration.  Changed: identifiers, and `geometry.js` for the 11" panel
+  (short side 148.1 mm, sensor 20.6 mm in from the long axis' end, measured
+  with evtest on the tablet).
+- `device/usr/libexec/gts9wifi-fingerprint-ui` and its systemd/D-Bus files:
+  the availability lease broker, D-Bus name `io.github.ygecesefa.Gts9wifiFingerprintUI`.
+- `gnome-presented-bridge/`: the Clutter "presented" GObject bridge
+  (typelib `Gts9wifiPresented`), built by `build-fingerprint-userspace.sh`.
