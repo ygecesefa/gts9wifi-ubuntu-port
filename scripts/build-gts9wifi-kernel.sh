@@ -7,6 +7,8 @@
 # overlayfs, netfilter).  Ultra-only SoC improvements are layered on later,
 # one at a time, after this baseline has booted.
 #
+# For quick iterations on the same tree use rebuild-gts9wifi-kernel-incremental.sh.
+#
 # The source tree is exported fresh from the pinned tag on every run, so no
 # patch from an earlier attempt can leak into the build.
 set -euo pipefail

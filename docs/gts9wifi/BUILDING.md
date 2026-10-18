@@ -93,6 +93,33 @@ Outputs:
 
 None of these scripts write to a tablet or to any real block device.
 
+## Changing the kernel
+
+The kernel is built with `CONFIG_DEBUG_INFO_BTF_MODULES=y` and without
+`CONFIG_MODULE_ALLOW_BTF_MISMATCH`, so a module is refused unless it was built
+against the exact `vmlinux` that is running. **Never ship a new `Image.gz`
+without the modules from the same build** (rebuilding only `Image.gz` once
+left the tablet without Wi-Fi, because `ath11k` would no longer load).
+
+To iterate on the existing tree (new patch in `kernel/patches-gts9wifi/`
+applied by hand, driver edit, config change):
+
+```sh
+# kernel + every module in one make; --rootfs also refreshes the build rootfs
+# and its initramfs, so the next bundle's vendor_boot matches
+bash scripts/rebuild-gts9wifi-kernel-incremental.sh --rootfs
+bash scripts/build-gts9wifi-bundle.sh
+python3 -I scripts/verify-gts9wifi-bundle.py ../build/gts9wifi-bundle ../build/gts9wifi-kernel/out
+
+# on a tablet that already runs Ubuntu: install the matching modules, then
+# write boot.img (and vendor_boot.img) as described in INSTALL.md
+bash scripts/install-gts9wifi-modules-live.sh \
+    ../build/gts9wifi-kernel/out/modules-7.2.0-gts9wifi.tar.gz gts9wifi
+```
+
+The live install keeps the previous module tree as
+`/usr/lib/modules/<release>.bak-<date>` and touches nothing else.
+
 ## What each step does
 
 **Kernel.** Exports a pristine tree from the `v7.2` tag, runs the Fedora
