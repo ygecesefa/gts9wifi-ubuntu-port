@@ -134,3 +134,10 @@ partitions every boot), `gts9wifi-bt-provision` (same), `rmtfs` (no modem).
 the device-control extension, fingerprint. **Kernel/image:** charging bypass
 and limit, DTB carveout reclaim, S9 Ultra SoC patches, image v0.2.0-pre2,
 boot-time key choice, TWRP + installer ZIP.
+
+## 2026-10-18 — v0.1.0-alpha1 removed
+
+The superseded v0.1.0-alpha1 (never booted) and its artifacts were removed:
+its GitHub release and tag, the `legacy/hermes-v0.1` branch, and the local
+build outputs. Its lessons stay in this log. The agent's own session records
+were kept untouched.
