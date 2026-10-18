@@ -242,17 +242,11 @@ diff <(grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' "$android/SHA256SUMS" 
 install -m 0755 "$repo/dualboot/ubuntu-to-android" "$rootfs/usr/local/sbin/ubuntu-to-android"
 printf '%%sudo ALL=(root) NOPASSWD: /usr/local/sbin/ubuntu-to-android\n' > "$rootfs/etc/sudoers.d/gts9wifi-android"
 chmod 0440 "$rootfs/etc/sudoers.d/gts9wifi-android"
-cat > "$rootfs/usr/share/applications/gts9wifi-android.desktop" <<'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Android'e Geç
-Comment=Android önyükleme imajlarını geri yükle ve yeniden başlat
-Exec=sudo -n /usr/local/sbin/ubuntu-to-android
-Icon=system-reboot
-Terminal=true
-Categories=System;
-EOF
+# One tap from the app grid / dock: no terminal, no password, no confirmation.
+install -m 0755 "$repo/dualboot/gts9wifi-to-android" "$rootfs/usr/local/bin/gts9wifi-to-android"
+install -m 0644 "$repo/dualboot/gts9wifi-android.desktop" "$rootfs/usr/share/applications/gts9wifi-android.desktop"
+install -m 0644 "$repo/dualboot/99-gts9wifi-android.gschema.override" "$rootfs/usr/share/glib-2.0/schemas/"
+chroot "$rootfs" glib-compile-schemas /usr/share/glib-2.0/schemas/
 
 for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-panel-coldboot-recover.service gts9wifi-grow-rootfs.service \

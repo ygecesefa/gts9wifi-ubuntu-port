@@ -1,0 +1,5 @@
+[org.gnome.shell]
+favorite-apps=['gts9wifi-android.desktop', 'firefox_firefox.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'snap-store_snap-store.desktop', 'yelp.desktop']
+
+[org.gnome.shell:ubuntu]
+favorite-apps=['gts9wifi-android.desktop', 'firefox_firefox.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'snap-store_snap-store.desktop', 'yelp.desktop']

@@ -1,0 +1,15 @@
+#!/usr/bin/bash
+# One-tap "Switch to Android" for the app grid / dock: no terminal, no
+# password (sudoers rule for ubuntu-to-android), no confirmation.  On success
+# ubuntu-to-android reboots the tablet into Android; on any failure it writes
+# nothing (checks fail) or refuses to reboot (read-back mismatch), and the
+# reason is shown here.
+out=$(mktemp)
+notify-send -u critical -i system-reboot "Android'e geçiliyor" \
+	"Android önyükleme imajları yazılıyor, tablet yeniden başlayacak…"
+if ! sudo -n /usr/local/sbin/ubuntu-to-android >"$out" 2>&1; then
+	logger -t gts9wifi-to-android -f "$out"
+	zenity --error --width=480 --title="Android'e geçilemedi" \
+		--text="Geçiş tamamlanmadı; tablet yeniden başlatılmadı.\n\n$(tail -n 6 "$out")"
+fi
+rm -f "$out"
