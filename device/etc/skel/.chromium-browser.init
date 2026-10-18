@@ -1,0 +1,4 @@
+# Sourced by the Chromium snap's launcher.  Chromium only talks to the GNOME
+# on-screen keyboard through Wayland text-input-v3, which it leaves off by
+# default: without these flags tapping a text field does not open the keyboard.
+CHROMIUM_FLAGS="$CHROMIUM_FLAGS --ozone-platform=wayland --enable-wayland-ime --wayland-text-input-version=3"
