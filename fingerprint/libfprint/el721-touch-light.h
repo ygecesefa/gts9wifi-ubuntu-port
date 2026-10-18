@@ -1,0 +1,49 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+#pragma once
+#include <glib.h>
+
+/* Shell now acknowledges two presented panel frames before HBM is enabled.
+ * Allow a further 100 ms of optical settling after the panel write completes.
+ * A shorter poll avoids adding another near-full interval to that deadline. */
+#define EL721_LIGHT_SETTLE_US (100 * 1000)
+#define EL721_POLL_MS 20
+#define EL721_PRESENT_POLL_MS 5
+
+static inline guint
+el721_touch_light_poll_ms (gboolean awaiting_presentation)
+{
+  return awaiting_presentation ? EL721_PRESENT_POLL_MS : EL721_POLL_MS;
+}
+
+typedef enum
+{
+  EL721_LIGHT_WAIT,
+  EL721_LIGHT_ON,
+  EL721_LIGHT_OFF,
+  EL721_LIGHT_CAPTURE,
+} El721LightStep;
+
+static inline El721LightStep
+el721_touch_light_step (gint64 *deadline, gint64 now,
+                        gboolean pressed, gboolean new_contact)
+{
+  if (*deadline)
+    {
+      if (!pressed)
+        {
+          *deadline = 0;
+          return EL721_LIGHT_OFF;
+        }
+      if (now >= *deadline)
+        {
+          *deadline = 0;
+          return EL721_LIGHT_CAPTURE;
+        }
+    }
+  else if (new_contact && pressed)
+    {
+      *deadline = now + EL721_LIGHT_SETTLE_US;
+      return EL721_LIGHT_ON;
+    }
+  return EL721_LIGHT_WAIT;
+}

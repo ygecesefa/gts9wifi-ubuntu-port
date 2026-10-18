@@ -1,0 +1,129 @@
+#!/usr/bin/python3
+"""Assemble the fingerprint secure-start runtime from this tablet's own Android.
+
+  gts9wifi-fingerprint-runtime assemble   copy into /var/lib/gts9wifi/fingerprint
+  gts9wifi-fingerprint-runtime check      show what is present (read-only)
+
+The SPU needs Samsung's sec_nvm and spdaemon running before Keymaster can be
+configured (see docs/gts9wifi/FINGERPRINT.md).  They are Android binaries, so
+they run under Android's bootstrap linker with the libraries they need, and
+the dualfp trusted app is loaded from its signed segments.  Nothing of that is
+in this repository: everything is copied from the tablet's own read-only
+partitions (vendor, system, apnhlos).  The calibration blobs calib.dat and
+egoptbds.dat only exist in Android's encrypted /data and have to be imported
+separately.  super is only ever mapped read-only.
+"""
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+DEST = Path('/var/lib/gts9wifi/fingerprint')
+RUNTIME = DEST / 'runtime'
+FIRMWARE = DEST / 'firmware'
+SYSTEM_MNT = Path('/run/gts9wifi-android-system')
+VENDOR = Path('/vendor')
+TA_DIR = Path('/vendor/firmware_mnt/image')
+
+BINARIES = {'bin/linker64': 'system/bin/bootstrap/linker64',
+            'bin/sec_nvm': 'vendor/bin/sec_nvm',
+            'bin/spdaemon': 'vendor/bin/spdaemon'}
+TA_SEGMENTS = [f'dualfp.b{i:02d}' for i in range(9)] + ['dualfp.mdt']
+# The SPSS firmware qcom_spss requests as spss1p.mdt (the supervisor points
+# the firmware loader at FIRMWARE before loading the module).
+TA_SEGMENTS += [f'spss1p.b{i:02d}' for i in range(3)] + ['spss1p.mdt']
+
+
+def system_root():
+    root = SYSTEM_MNT / 'system'
+    if root.is_dir():
+        return root
+    if not Path('/dev/mapper/system').exists():
+        subprocess.run(['/usr/libexec/gts9wifi-android-parts', 'map', 'system'],
+                       check=True)
+    SYSTEM_MNT.mkdir(mode=0o700, exist_ok=True)
+    subprocess.run(['mount', '-o', 'ro,noload,nodev,nosuid,noexec',
+                    '/dev/mapper/system', str(SYSTEM_MNT)], check=True)
+    return root
+
+
+def needed(path):
+    """DT_NEEDED entries of an ELF64 little-endian file."""
+    import struct
+    data = path.read_bytes()
+    shoff = struct.unpack_from('<Q', data, 0x28)[0]
+    shentsize, shnum = struct.unpack_from('<HH', data, 0x3a)
+    sections = [struct.unpack_from('<IIQQQQIIQQ', data, shoff + i * shentsize)
+                for i in range(shnum)]
+    out = []
+    for sec in sections:
+        if sec[1] != 6:                       # SHT_DYNAMIC
+            continue
+        strtab = sections[sec[6]][4]
+        for i in range(sec[5] // 16):
+            tag, val = struct.unpack_from('<qQ', data, sec[4] + i * 16)
+            if tag == 1:                      # DT_NEEDED
+                end = data.index(b'\0', strtab + val)
+                out.append(data[strtab + val:end].decode())
+    return out
+
+
+def sources(system):
+    """Map of runtime-relative path -> source file on the tablet."""
+    base = {'system': system, 'vendor': VENDOR}
+    files = {dst: base[src.split('/')[0]] / src.split('/', 1)[1]
+             for dst, src in BINARIES.items()}
+    search = [VENDOR / 'lib64', system / 'lib64/bootstrap', system / 'lib64']
+    todo = [files['bin/sec_nvm'], files['bin/spdaemon']]
+    while todo:
+        for name in needed(todo.pop()):
+            dst = f'lib64/{name}'
+            if dst in files:
+                continue
+            found = next((d / name for d in search if (d / name).exists()), None)
+            if found is None:
+                sys.exit(f'missing library {name}')
+            files[dst] = found
+            todo.append(found)
+    # ld-android.so is the linker's own soname, not a DT_NEEDED of the tools.
+    files['lib64/ld-android.so'] = system / 'lib64/ld-android.so'
+    return files
+
+
+def copy(src, dst, mode):
+    dst.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    shutil.copyfile(src, dst)
+    os.chmod(dst, mode)
+    return hashlib.sha256(dst.read_bytes()).hexdigest()
+
+
+def assemble():
+    if os.geteuid() != 0:
+        sys.exit('root required')
+    system = system_root()
+    DEST.mkdir(mode=0o700, parents=True, exist_ok=True)
+    manifest = []
+    for dst, src in sorted(sources(system).items()):
+        mode = 0o755 if dst.startswith('bin/') else 0o644
+        manifest.append(f'{copy(src, RUNTIME / dst, mode)}  runtime/{dst}')
+    for name in TA_SEGMENTS:
+        manifest.append(f'{copy(TA_DIR / name, FIRMWARE / name, 0o644)}  firmware/{name}')
+    (DEST / 'SHA256SUMS').write_text('\n'.join(manifest) + '\n')
+    os.chmod(DEST / 'SHA256SUMS', 0o600)
+    print(f'{len(manifest)} files in {DEST}')
+    for blob in ('calib.dat', 'egoptbds.dat'):
+        if not (FIRMWARE / blob).exists():
+            print(f'still missing: firmware/{blob} (import from Android once)')
+
+
+def check():
+    for blob in sorted(DEST.rglob('*')):
+        if blob.is_file():
+            print(blob.relative_to(DEST))
+
+
+if __name__ == '__main__':
+    {'assemble': assemble, 'check': check}.get(
+        sys.argv[1] if len(sys.argv) > 1 else '', lambda: sys.exit(__doc__))()
