@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+#
+# The charger driver's switches (fast_charge, charge_limit, charge_bypass) are
+# root-only, so the session cannot change them from its own UI (the
+# gnome-gts9wifi extension and /usr/libexec/gts9wifi-device-control).  Open
+# them to group video, the same group 71-gts9wifi-touchscreen-perms.rules uses,
+# because that is the group the seat user already has.  ($$ is a literal $ for
+# udev.)
+ACTION=="add|change", SUBSYSTEM=="i2c", KERNEL=="6-0049", \
+	RUN+="/bin/sh -c 'for a in fast_charge charge_limit charge_bypass; do f=%S%p/$$a; [ -e $$f ] && chgrp video $$f && chmod 0664 $$f; done; true'"

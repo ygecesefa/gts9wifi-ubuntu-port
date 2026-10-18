@@ -1,0 +1,337 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] power: supply: sm5714: charge limit and charging bypass
+
+Neither the Fedora port nor GNOME/UPower gives this tablet a way to keep
+the pack below full or to run from the charger without charging it.
+Add both on the standard power_supply interface:
+
+- charge_control_end_threshold / charge_control_start_threshold: once
+  the gauge reaches the end threshold charging stops, and it resumes at
+  the start threshold (hysteresis; end 100 = no limit, the default).
+- charge_behaviour: auto / inhibit-charge (bypass): on external power
+  the tablet runs from the cable and the pack is left alone.
+
+Both pause charging the way the thermal stop already does, by opening
+Q4 (CNTL1.ENQ4FET); the one-second recovery poll no longer re-closes it
+while paused, a paused path refuses the SM5440 direct charger, and
+sm5714_battery_fast_charge_enabled() reports off so an active pump hands
+the pack back within one SM5440 poll.
+
+charge_limit (80 % / 75 %) and charge_bypass are 0/1 device attributes
+for the gnome-gts9wifi settings page, which only handles switches.
+
+---
+--- a/drivers/power/supply/sm5714_battery.c	2026-10-19 00:31:51.974056895 +0300
++++ b/drivers/power/supply/sm5714_battery.c	2026-10-19 00:31:51.975112028 +0300
+@@ -91,6 +91,10 @@
+ #define SM5714_FG_SRAM_CURRENT_AVG	0x09
+ 
+ #define SM5714_POLL_INTERVAL_MS		1000
++
++/* The charge limit toggle: stop at 80 %, resume below 75 %. */
++#define SM5714_LIMIT_END_DEFAULT	80
++#define SM5714_LIMIT_START_DEFAULT	75
+ #define SM5714_CAPACITY_POLL_DIVIDER	10
+ 
+ enum sm5714_charge_thermal_state {
+@@ -133,14 +137,31 @@
+ 	 * attribute.
+ 	 */
+ 	bool fast_charge;
++	/*
++	 * Charge control, on the standard power_supply properties.  An end
++	 * threshold below 100 stops charging once the gauge reaches it and
++	 * resumes at the start threshold; charge_behaviour inhibit-charge
++	 * (bypass) keeps the tablet on external power without charging.
++	 * Both only open Q4, the path the thermal stop already uses.
++	 */
++	unsigned int end_threshold;
++	unsigned int start_threshold;
++	bool inhibit_charge;
++	bool limit_hold;
+ };
+ 
++static bool sm5714_charge_paused(struct sm5714_battery *sm)
++{
++	return READ_ONCE(sm->inhibit_charge) || READ_ONCE(sm->limit_hold);
++}
++
+ static DEFINE_MUTEX(sm5714_global_lock);
+ static struct sm5714_battery *sm5714_primary;
+ 
+ static int sm5714_get_online_raw(struct sm5714_battery *sm);
+ static int sm5714_get_online(struct sm5714_battery *sm);
+ static int sm5714_get_temp(struct sm5714_battery *sm, int *val);
++static bool sm5714_update_limit_hold(struct sm5714_battery *sm, int capacity);
+ int sm5714_battery_set_pd_contract(unsigned int mv, unsigned int ma);
+ bool sm5714_battery_fast_charge_enabled(void);
+ int sm5714_battery_set_direct_charge(bool active);
+@@ -368,6 +389,12 @@
+ 		goto out_unlock;
+ 	}
+ 
++	if (sm5714_charge_paused(sm)) {
++		ret = sm5714_chg_update_bits(sm, SM5714_CHG_REG_CNTL1,
++					     SM5714_CHG_CNTL1_ENQ4FET, 0);
++		goto out_unlock;
++	}
++
+ 	thermal_state = sm->thermal_state;
+ 	if (!sm5714_get_temp(sm, &temp)) {
+ 		thermal_state = sm5714_charge_thermal_state(sm, temp);
+@@ -534,6 +561,10 @@
+ 	}
+ 
+ 	if (active) {
++		if (sm5714_charge_paused(sm)) {
++			ret = -EBUSY;
++			goto out;
++		}
+ 		ret = sm5714_get_temp(sm, &temp);
+ 		if (ret)
+ 			goto out;
+@@ -901,6 +932,20 @@
+ 		ret = sm5714_get_current(sm, SM5714_FG_SRAM_CURRENT_AVG,
+ 					 &val->intval);
+ 		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD:
++		val->intval = sm->start_threshold;
++		ret = 0;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD:
++		val->intval = sm->end_threshold;
++		ret = 0;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
++		val->intval = sm->inhibit_charge ?
++			POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE :
++			POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
++		ret = 0;
++		break;
+ 	case POWER_SUPPLY_PROP_TEMP:
+ 		ret = sm5714_get_temp(sm, &val->intval);
+ 		break;
+@@ -977,8 +1022,66 @@
+ 	POWER_SUPPLY_PROP_CURRENT_AVG,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+ 	POWER_SUPPLY_PROP_TEMP,
++	POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD,
++	POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD,
++	POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
+ };
+ 
++static void sm5714_charge_control_changed(struct sm5714_battery *sm)
++{
++	int capacity = sm->last_capacity;
++
++	sm5714_update_limit_hold(sm, capacity);
++	if (sm5714_get_online(sm) > 0)
++		sm5714_configure_charging(sm);
++	power_supply_changed(sm->psy_bat);
++}
++
++static int sm5714_bat_set_property(struct power_supply *psy,
++				   enum power_supply_property psp,
++				   const union power_supply_propval *val)
++{
++	struct sm5714_battery *sm = power_supply_get_drvdata(psy);
++
++	switch (psp) {
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD:
++		if (val->intval < 0 || val->intval > 100)
++			return -EINVAL;
++		sm->start_threshold = val->intval;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD:
++		if (val->intval < 50 || val->intval > 100)
++			return -EINVAL;
++		sm->end_threshold = val->intval;
++		/* Keep a usable band whatever order the two are written in. */
++		if (sm->start_threshold >= sm->end_threshold)
++			sm->start_threshold = sm->end_threshold - 5;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
++		if (val->intval != POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO &&
++		    val->intval != POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE)
++			return -EINVAL;
++		WRITE_ONCE(sm->inhibit_charge, val->intval ==
++			   POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE);
++		dev_info(sm->dev, "charge behaviour: %s\n",
++			 sm->inhibit_charge ? "inhibit-charge (bypass)" : "auto");
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	sm5714_charge_control_changed(sm);
++	return 0;
++}
++
++static int sm5714_bat_property_is_writeable(struct power_supply *psy,
++					    enum power_supply_property psp)
++{
++	return psp == POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD ||
++	       psp == POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD ||
++	       psp == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR;
++}
++
+ static enum power_supply_property sm5714_usb_props[] = {
+ 	POWER_SUPPLY_PROP_ONLINE,
+ 	POWER_SUPPLY_PROP_USB_TYPE,
+@@ -992,6 +1095,10 @@
+ 	.properties	= sm5714_bat_props,
+ 	.num_properties	= ARRAY_SIZE(sm5714_bat_props),
+ 	.get_property	= sm5714_bat_get_property,
++	.set_property	= sm5714_bat_set_property,
++	.property_is_writeable = sm5714_bat_property_is_writeable,
++	.charge_behaviours = BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) |
++			     BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE),
+ };
+ 
+ static const struct power_supply_desc sm5714_usb_desc = {
+@@ -1008,6 +1115,30 @@
+ };
+ 
+ /*
++ * Track the charge limit with hysteresis; returns whether it changed.  An
++ * unknown capacity (< 0) keeps the current decision.
++ */
++static bool sm5714_update_limit_hold(struct sm5714_battery *sm, int capacity)
++{
++	bool hold = sm->limit_hold;
++
++	if (sm->end_threshold >= 100)
++		hold = false;
++	else if (capacity >= 0 && capacity >= sm->end_threshold)
++		hold = true;
++	else if (capacity >= 0 && capacity <= sm->start_threshold)
++		hold = false;
++
++	if (hold == sm->limit_hold)
++		return false;
++
++	WRITE_ONCE(sm->limit_hold, hold);
++	dev_info(sm->dev, "charge limit: %s at %d %%\n",
++		 hold ? "holding" : "charging", capacity);
++	return true;
++}
++
++/*
+  * The charger interrupt is shared with the MUIC and fuel-gauge blocks.  Until
+  * that MFD interrupt domain is implemented, poll VBUS and charging state once
+  * per second so desktop indication follows a cable event promptly.  Capacity
+@@ -1030,6 +1161,11 @@
+ 	    sm5714_get_capacity(sm, &capacity))
+ 		capacity = sm->last_capacity;
+ 
++	if (sm5714_update_limit_hold(sm, capacity) && online > 0) {
++		sm5714_configure_charging(sm);
++		status = sm5714_get_status(sm);
++	}
++
+ 	old_thermal_state = sm->thermal_state;
+ 	if (online > 0 && !sm5714_get_temp(sm, &temp))
+ 		sm->thermal_state = sm5714_charge_thermal_state(sm, temp);
+@@ -1048,7 +1184,8 @@
+ 	 */
+ 	if (online > 0 && !READ_ONCE(sm->direct_charging) &&
+ 	    status == POWER_SUPPLY_STATUS_NOT_CHARGING &&
+-	    sm->thermal_state != SM5714_THERMAL_STOP) {
++	    sm->thermal_state != SM5714_THERMAL_STOP &&
++	    !sm5714_charge_paused(sm)) {
+ 		cntl1 = i2c_smbus_read_byte_data(sm->chg, SM5714_CHG_REG_CNTL1);
+ 		if (cntl1 >= 0 && !(cntl1 & SM5714_CHG_CNTL1_ENQ4FET) &&
+ 		    !sm5714_configure_charging(sm))
+@@ -1162,8 +1299,72 @@
+ }
+ static DEVICE_ATTR_RW(fast_charge);
+ 
++/*
++ * 0/1 switches for the gnome-gts9wifi settings page (gts9wifi-device-control
++ * only handles booleans): charge_limit is the 80 % / 75 % band on the
++ * standard thresholds, charge_bypass is charge_behaviour inhibit-charge.
++ */
++static ssize_t charge_limit_show(struct device *dev,
++				 struct device_attribute *attr, char *buf)
++{
++	struct sm5714_battery *sm = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n", sm->end_threshold < 100);
++}
++
++static ssize_t charge_limit_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	struct sm5714_battery *sm = dev_get_drvdata(dev);
++	bool enabled;
++	int ret;
++
++	ret = kstrtobool(buf, &enabled);
++	if (ret)
++		return ret;
++
++	sm->end_threshold = enabled ? SM5714_LIMIT_END_DEFAULT : 100;
++	sm->start_threshold = SM5714_LIMIT_START_DEFAULT;
++	dev_info(dev, "charge limit %s\n", enabled ? "80 %" : "off");
++	sm5714_charge_control_changed(sm);
++
++	return count;
++}
++static DEVICE_ATTR_RW(charge_limit);
++
++static ssize_t charge_bypass_show(struct device *dev,
++				  struct device_attribute *attr, char *buf)
++{
++	struct sm5714_battery *sm = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%d\n", sm->inhibit_charge);
++}
++
++static ssize_t charge_bypass_store(struct device *dev,
++				   struct device_attribute *attr,
++				   const char *buf, size_t count)
++{
++	struct sm5714_battery *sm = dev_get_drvdata(dev);
++	bool enabled;
++	int ret;
++
++	ret = kstrtobool(buf, &enabled);
++	if (ret)
++		return ret;
++
++	WRITE_ONCE(sm->inhibit_charge, enabled);
++	dev_info(dev, "charging bypass %s\n", enabled ? "on" : "off");
++	sm5714_charge_control_changed(sm);
++
++	return count;
++}
++static DEVICE_ATTR_RW(charge_bypass);
++
+ static struct attribute *sm5714_attrs[] = {
+ 	&dev_attr_fast_charge.attr,
++	&dev_attr_charge_limit.attr,
++	&dev_attr_charge_bypass.attr,
+ 	NULL,
+ };
+ 
+@@ -1183,7 +1384,8 @@
+ 	sm = sm5714_primary;
+ 	mutex_unlock(&sm5714_global_lock);
+ 
+-	return sm && sm->fast_charge;
++	/* A paused battery path also hands the pack back from the SM5440. */
++	return sm && sm->fast_charge && !sm5714_charge_paused(sm);
+ }
+ EXPORT_SYMBOL_GPL(sm5714_battery_fast_charge_enabled);
+ 
+@@ -1297,6 +1499,9 @@
+ 				 sm->float_uv / 1000);
+ 	}
+ 
++	sm->end_threshold = 100;
++	sm->start_threshold = SM5714_LIMIT_START_DEFAULT;
++
+ 	sm->last_status = sm5714_get_status(sm);
+ 	if (sm5714_get_capacity(sm, &sm->last_capacity))
+ 		sm->last_capacity = -1;
