@@ -1,0 +1,189 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] media: dw9808: never hold the shared sensor rail
+
+The DW9808 VCM is supplied from rear_cam_vio, the rear HI1337's I/O rail.
+The driver enabled that rail itself while its subdev was open, which with
+PipeWire/libcamera is always: the rail then never dropped when the sensor
+powered down, lens writes between streams timed out on the CCI, and a
+quick stop/start left the sensor unresponsive.  Follow the rail with a
+regulator notifier instead, write to the VCM only once the sensor has had
+it up for 30 ms, and keep a position requested while it is down for the
+next write.
+---
+--- a/drivers/media/i2c/dw9808_vcm.c	2026-10-18 18:15:52.491105214 +0300
++++ b/drivers/media/i2c/dw9808_vcm.c	2026-10-18 18:15:18.119854164 +0300
+@@ -4,6 +4,7 @@
+ #include <linux/delay.h>
+ #include <linux/i2c.h>
+ #include <linux/iopoll.h>
++#include <linux/ktime.h>
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/regulator/consumer.h>
+@@ -24,6 +25,8 @@
+ 	struct v4l2_ctrl_handler controls;
+ 	struct v4l2_subdev subdev;
+ 	struct regulator *vcc;
++	struct notifier_block rail_nb;
++	ktime_t rail_up;
+ 	u16 position;
+ 	bool inited;
+ };
+@@ -97,16 +100,43 @@
+ }
+ 
+ /*
+- * The VCM shares the 1.8 V sensor rail (rear_cam_vio) and only answers on I2C
+- * while the sensor keeps that rail up (i.e. while streaming). Detect rail
+- * down/power-cycles so a re-initialisation happens on the next write.
++ * The VCM shares the 1.8 V rear sensor rail (rear_cam_vio) and only answers
++ * on I2C while the sensor is powered.  The driver never enables that rail
++ * itself: holding it up across a sensor power cycle (an open lens subdev is
++ * enough) leaves the sensor unresponsive after a quick stop/start, which is
++ * what GNOME Snapshot does when it takes a picture.  Instead the rail is
++ * followed through a regulator notifier, and positions requested while it is
++ * down are kept and applied on the next write once the sensor streams.
+  */
++#define DW9808_RAIL_SETTLE_MS	30
++
++static bool dw9808_rail_ready(struct dw9808_device *dw9808)
++{
++	if (!regulator_is_enabled(dw9808->vcc))
++		return false;
++	return ktime_ms_delta(ktime_get(), dw9808->rail_up) >= DW9808_RAIL_SETTLE_MS;
++}
++
++static int dw9808_rail_event(struct notifier_block *nb, unsigned long event,
++			     void *data)
++{
++	struct dw9808_device *dw9808 = container_of(nb, struct dw9808_device,
++						    rail_nb);
++
++	if (event & REGULATOR_EVENT_ENABLE)
++		dw9808->rail_up = ktime_get();
++	if (event & (REGULATOR_EVENT_PRE_DISABLE | REGULATOR_EVENT_DISABLE |
++		     REGULATOR_EVENT_FORCE_DISABLE))
++		dw9808->inited = false;
++	return NOTIFY_OK;
++}
++
+ static int dw9808_ensure_ready(struct dw9808_device *dw9808,
+ 			       struct i2c_client *client)
+ {
+ 	int ret;
+ 
+-	if (!regulator_is_enabled(dw9808->vcc)) {
++	if (!dw9808_rail_ready(dw9808)) {
+ 		dw9808->inited = false;
+ 		return -EAGAIN;
+ 	}
+@@ -138,15 +168,18 @@
+ 	if (ret <= 0)
+ 		return ret < 0 ? ret : 0;
+ 	ret = dw9808_ensure_ready(dw9808, client);
+-	if (ret == -EAGAIN) {
+-		/* Keep the device active until close; the position is applied
+-		 * on the next successful write once the sensor streams. */
+-		pm_runtime_put(&client->dev);
+-		return 0;
+-	}
+ 	if (!ret)
+ 		ret = dw9808_set_position(client, dw9808->position);
+ 	pm_runtime_put(&client->dev);
++	/*
++	 * The sensor can power down between the rail check and the write;
++	 * keep the position for the next write instead of failing the
++	 * request that carried it.
++	 */
++	if (ret == -EAGAIN || ret == -ETIMEDOUT || ret == -EREMOTEIO || ret == -EIO) {
++		dw9808->inited = false;
++		return 0;
++	}
+ 	return ret;
+ }
+ 
+@@ -179,60 +212,25 @@
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+ 	struct dw9808_device *dw9808 = to_dw9808(subdev);
+-	int position, ret = 0;
+-
+-	if (!regulator_is_enabled(dw9808->vcc)) {
+-		dw9808->inited = false;
+-		return 0;
+-	}
++	int position;
+ 
+-	for (position = dw9808->position & ~(DW9808_CTRL_STEPS - 1);
+-	     position >= 0; position -= DW9808_CTRL_STEPS) {
+-		int step_ret = dw9808_set_position(client, position);
+-
+-		if (step_ret && !ret)
+-			ret = step_ret;
+-		usleep_range(DW9808_CTRL_DELAY_US, DW9808_CTRL_DELAY_US + 100);
++	/* Park the lens softly only if the sensor still powers the rail. */
++	if (dw9808->inited && dw9808_rail_ready(dw9808)) {
++		for (position = dw9808->position & ~(DW9808_CTRL_STEPS - 1);
++		     position >= 0; position -= DW9808_CTRL_STEPS) {
++			if (dw9808_set_position(client, position))
++				break;
++			usleep_range(DW9808_CTRL_DELAY_US, DW9808_CTRL_DELAY_US + 100);
++		}
++		dw9808_write(client, DW9808_REG_CONTROL, 0x01);
+ 	}
+-	if (dw9808_write(client, DW9808_REG_CONTROL, 0x01) && !ret)
+-		ret = -EIO;
+-	regulator_disable(dw9808->vcc);
+ 	dw9808->inited = false;
+-	return ret;
++	return 0;
+ }
+ 
+ static int dw9808_resume(struct device *dev)
+ {
+-	struct i2c_client *client = to_i2c_client(dev);
+-	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+-	struct dw9808_device *dw9808 = to_dw9808(subdev);
+-	int position, ret;
+-
+-	ret = regulator_enable(dw9808->vcc);
+-	if (ret)
+-		return ret;
+-	usleep_range(1000, 1100);
+-
+-	ret = dw9808_ensure_ready(dw9808, client);
+-	if (ret) {
+-		regulator_disable(dw9808->vcc);
+-		/* The shared rail may be off while the sensor is idle; keep the
+-		 * open() alive and retry initialisation from dw9808_set_control()
+-		 * once the sensor streams. */
+-		return 0;
+-	}
+-
+-	for (position = dw9808->position % DW9808_CTRL_STEPS;
+-	     position < dw9808->position + DW9808_CTRL_STEPS;
+-	     position += DW9808_CTRL_STEPS) {
+-		ret = dw9808_set_position(client,
+-					 min(position, (int)dw9808->position));
+-		if (ret)
+-			break;
+-		usleep_range(DW9808_CTRL_DELAY_US, DW9808_CTRL_DELAY_US + 100);
+-	}
+-	/* Leave the rail on until the subdev is closed (as before); the sensor
+-	 * streaming path never races it because the regulator is shared. */
++	/* Nothing to do until the sensor powers the rail; see above. */
+ 	return 0;
+ }
+ 
+@@ -252,6 +250,11 @@
+ 	if (IS_ERR(dw9808->vcc))
+ 		return dev_err_probe(&client->dev, PTR_ERR(dw9808->vcc),
+ 				     "failed to get VCC supply\n");
++	dw9808->rail_nb.notifier_call = dw9808_rail_event;
++	ret = devm_regulator_register_notifier(dw9808->vcc, &dw9808->rail_nb);
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "failed to watch VCC supply\n");
+ 
+ 	v4l2_i2c_subdev_init(&dw9808->subdev, client, &dw9808_subdev_ops);
+ 	dw9808->subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
