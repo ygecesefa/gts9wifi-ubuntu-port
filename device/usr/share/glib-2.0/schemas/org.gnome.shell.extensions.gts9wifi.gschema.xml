@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gts9wifi"
+          path="/org/gnome/shell/extensions/gts9wifi/">
+    <key name="keyboard-button" type="b">
+      <default>true</default>
+      <summary>Floating on-screen keyboard button</summary>
+      <description>Show a small draggable button that opens and closes the on-screen keyboard, for apps that do not open it on their own (X11 apps, Wine).</description>
+    </key>
+    <key name="keyboard-button-position" type="(dd)">
+      <default>(1.0, 0.6)</default>
+      <summary>Button position</summary>
+      <description>Position of the button as fractions of the monitor's free area, so it stays in place across rotations.</description>
+    </key>
+  </schema>
+</schemalist>

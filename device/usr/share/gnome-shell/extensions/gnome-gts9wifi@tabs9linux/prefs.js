@@ -7,6 +7,7 @@
 // field it carries, so a new control shows up here without touching this file.
 
 import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -62,6 +63,19 @@ export default class Gts9wifiPreferences extends ExtensionPreferences {
             groups.get(control.group).add(row);
         }
 
+        page.add(this._keyboardGroup());
         window.add(page);
+    }
+
+    _keyboardGroup() {
+        const group = new Adw.PreferencesGroup({title: _('Keyboard')});
+        const row = new Adw.SwitchRow({
+            title: _('Floating keyboard button'),
+            subtitle: _('A draggable button that opens the on-screen keyboard, for apps that do not open it on their own (X11 apps, Wine).'),
+        });
+        this.getSettings().bind('keyboard-button', row, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        group.add(row);
+        return group;
     }
 }

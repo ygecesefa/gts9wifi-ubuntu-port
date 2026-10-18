@@ -77,10 +77,11 @@ This table is only updated from tests on the real tablet.
 
 ## Using the tablet
 
-- **On-screen keyboard by gesture:** swipe up from the bottom edge of the
-  screen, starting near the bottom-left corner. This opens GNOME's keyboard
-  anywhere, including in apps where tapping a text field does not bring it up
-  (XWayland/X11 apps, Wine).
+- **On-screen keyboard anywhere:** tap the floating keyboard button (drag it
+  to move it; switch it off in the extension's settings) or swipe up from the
+  bottom edge of the screen, near the bottom-left corner. Both open GNOME's
+  keyboard in apps where tapping a text field does not bring it up
+  (XWayland/X11 apps, Wine), and it types into them.
 - **Power key:** press and release to suspend, press again to wake; hold it
   for about a second for the Restart / Power Off menu.
 - **Double tap to wake:** on by default; toggle it in the *gnome-gts9wifi*
