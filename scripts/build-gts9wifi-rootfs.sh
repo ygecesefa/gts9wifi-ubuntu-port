@@ -53,10 +53,10 @@ apparmor,apparmor-utils,
 snapd,squashfs-tools,
 netplan.io,network-manager,wpasupplicant,
 openssh-server,avahi-daemon,
-protection-domain-mapper,qrtr-tools,rmtfs,linux-firmware,
+protection-domain-mapper,qrtr-tools,linux-firmware,
 iputils-ping,curl,wget,ca-certificates,
 nano,less,htop,rsync,unzip,acl,python3,
-usbutils,pciutils,ethtool,evtest,i2c-tools,v4l-utils,
+usbutils,pciutils,ethtool,evtest,i2c-tools,v4l-utils,iw,
 strace,tree,
 ubuntu-desktop-minimal,gdm3,gnome-shell,gnome-session,gnome-control-center,
 gnome-terminal,nautilus,gnome-text-editor,
@@ -173,6 +173,29 @@ cp "$kernel_out/sm8550-samsung-gts9wifi.dtb" "$rootfs/boot/dtbs/"
 cp "$kernel_out/Image.gz" "$rootfs/boot/vmlinuz-$krel"
 cp "$kernel_out/config" "$rootfs/boot/config-$krel"
 
+# 5 GHz RX: this tablet's WCN6855 reports qmi-chip-id=2, so ath11k picks the
+# chip-id=2 exact-ABI slot of board-2.bin, which holds a generic payload (5 GHz
+# RX ~40 dB weak: a phone hotspot 1 m away at -83 dBm).  The Fedora port put the
+# device-tuned NTM_TW220 payload only into the chip-id=18 slot, which this unit
+# never uses.  Copy it into the chip-id=2 slot as well (bdftool also updates
+# that slot's variants, none of which this DTS selects).  Measured after the
+# fix: the same hotspot at -41..-50 dBm, seven 5 GHz networks visible.
+bdf=$rootfs/usr/lib/firmware/ath11k/WCN6855/hw2.1/board-2.bin
+abi='bus=pci,vendor=17cb,device=1103,subsystem-vendor=17cb,subsystem-device=0108'
+bdftool=$fedora/tools/bdftool.py
+tuned_md5=6d42746b861fc52380a19dfdfaa702f1
+slot_md5() { python3 -I "$bdftool" md5s "$bdf" | awk -v n="$abi,$1" '$3 == n {print $2}'; }
+if [ "$(slot_md5 qmi-chip-id=2,qmi-board-id=255)" != "$tuned_md5" ]; then
+	t=$(mktemp -d)
+	python3 -I "$bdftool" dump "$bdf" "$abi,qmi-chip-id=18,qmi-board-id=255,variant=NTM_TW220" "$t/tuned.bin" >/dev/null
+	[ "$(sha256sum "$t/tuned.bin" | cut -d' ' -f1)" = 77b1b9ef636ce8492723aa7c2ff2c42c2e5e81a43967d7f32bfdef93a31bf8c4 ] || {
+		echo 'tuned WCN6855 payload not found in board-2.bin' >&2; exit 1; }
+	python3 -I "$bdftool" swap "$bdf" "$t/fixed.bin" "$abi,qmi-chip-id=2,qmi-board-id=255" "$t/tuned.bin" >/dev/null
+	install -m 0644 "$t/fixed.bin" "$bdf"
+	rm -rf "$t"
+fi
+[ "$(slot_md5 qmi-chip-id=2,qmi-board-id=255)" = "$tuned_md5" ] || { echo 'board-2.bin chip-id=2 slot not tuned' >&2; exit 1; }
+
 # The GPU probes before the root filesystem is mounted, so its firmware has to
 # be inside the initramfs.
 cat > "$rootfs/etc/initramfs-tools/hooks/gts9wifi-gpu-firmware" <<'EOF'
@@ -233,10 +256,10 @@ EOF
 
 for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-panel-coldboot-recover.service gts9wifi-grow-rootfs.service \
-	gts9wifi-wifi-recover.service gts9wifi-mem-reclaim.service \
+	gts9wifi-wifi-recover.service \
 	gts9wifi-x11-dir-fix.path vendor-dsp.mount vendor-firmware_mnt.mount \
 	mnt-vendor-persist.mount gts9wifi-adsp-boot.service pd-mapper.service \
-	rmtfs.service ssh.service NetworkManager.service; do
+	ssh.service NetworkManager.service; do
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done
 

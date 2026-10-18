@@ -1,5 +1,22 @@
 # Known issues and targets
 
+## Found on the first boot (v0.2.0-pre1, 2026-10-18)
+
+- **5 GHz Wi-Fi RX ~40 dB weak — fixed.** This tablet's WCN6855 reports
+  `qmi-chip-id=2`, so ath11k loads the `…subsystem-device=0108,qmi-chip-id=2,qmi-board-id=255`
+  entry of `board-2.bin`, a generic payload. The Fedora port's 5 GHz fix put the
+  device-tuned `NTM_TW220` payload only into the `qmi-chip-id=18` entry, which
+  this unit never selects. Copying the tuned payload into the chip-id=2 entry
+  took a phone hotspot 1 m away from −83 dBm to −41…−50 dBm and made seven
+  5 GHz networks visible. Done at build time by `build-gts9wifi-rootfs.sh`.
+- **`gts9wifi-mem-reclaim` disabled.** It rewrites the DTB inside the `boot` and
+  `vendor_boot` partitions on every boot to free ~812 MiB of unused carveouts.
+  That breaks the sha256-verified switch scripts and risks an unbootable boot
+  image. The same reclaim should be done at build time in the DTB instead.
+- `rmtfs` disabled: this Wi-Fi tablet has no modem.
+- Cameras: both HI1337 sensors and the DW9808 lens probe; apps see no camera
+  until the stage B libcamera.
+
 ## Open in v0.2.0-alpha1
 
 - Not yet booted on the tablet. Every hardware row is 🧪 until the first boot test.
@@ -16,13 +33,14 @@
 
 | Fedora issue | Plan in this port |
 |---|---|
-| S Pen tilt missing | port the tilt handling of the S9 Ultra Wacom driver to WEZ01 |
+| S Pen tilt missing | **works here**: WEZ01 reports TILT_X/Y, measured −29…+35 on the tablet |
 | Rear camera autofocus missing | the S9 Ultra port's libcamera software autofocus (DW9808 is the same actuator) |
 | No charging-bypass UI | expose SM5714/SM5440 bypass, add a toggle |
 | SELinux permissive | not applicable: Ubuntu uses AppArmor, enabled |
 | `/vendor` not mounted | map `super`'s vendor with dm-linear, read-only |
 | Browsers / VLC decode video in software | iris VPU via GStreamer/ffmpeg V4L2 for players; Vulkan Video is not implemented by Mesa Turnip on any Linux |
-| Linux 7.2.1–7.2.6 break Wi-Fi | kernel pinned to 7.2.0 |
+| Linux 7.2.1–7.2.6 break Wi-Fi | kernel pinned to 7.2.0; Wi-Fi works |
+| Weak 5 GHz (Fedora issue 7, marked fixed there) | the Fedora fix targets the wrong board-data entry for this unit; fixed here |
 
 ## Roadmap
 

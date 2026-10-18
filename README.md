@@ -16,7 +16,7 @@ systems only rewrites four boot partitions, which are backed up first.
 | Kernel | mainline Linux 7.2 + gts9wifi patches and drivers |
 | Userspace | Ubuntu 24.04 LTS (noble), GNOME on Wayland |
 | Root filesystem | microSD (`GTS9W_ROOT`), Android untouched on UFS |
-| Status | `v0.2.0-alpha1` — see [hardware status](#hardware-status) |
+| Status | `v0.2.0-pre1` boots — see [hardware status](#hardware-status) |
 
 ## Where this comes from
 
@@ -51,18 +51,19 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 
 | Area | v0.2.0-alpha1 | Notes |
 |---|---|---|
-| Boot from microSD | 🧪 | layout identical to the Fedora port's validated one |
-| Display (ANA38407) | 🧪 | |
-| Touch (FTS1BA90A) | 🧪 | |
-| Wi-Fi (WCN6855) | 🧪 | kernel pinned to 7.2.0; 7.2.1–7.2.6 break Wi-Fi |
-| Bluetooth | 🧪 | BD address provisioning disabled in alpha1 |
-| GPU (Adreno 740, Freedreno/Turnip) | 🧪 | firmware in the initramfs |
-| Audio (CS35L45) | 🧪 | |
-| Battery / charging (SM5714) | 🧪 | |
-| S Pen | 🧪 | tilt: planned |
-| Rear camera autofocus | — | planned: Ultra port's libcamera autofocus (stage B) |
-| Hardware video decode | — | planned: iris VPU through GStreamer/ffmpeg; Vulkan Video does not exist for Adreno on Linux |
-| Charging bypass UI | — | planned |
+| Boot from microSD | ✅ | first boot 2026-10-18; root grown to the whole card |
+| Display (ANA38407) | ✅ | DSI-1 2560×1600, backlight, GNOME on Wayland |
+| Touch (FTS1BA90A) | ✅ | |
+| Wi-Fi (WCN6855) | ✅ | 2.4 and 5 GHz; 5 GHz RX fixed via the correct board-data slot (see KNOWN-ISSUES) — fix built into the next image |
+| Bluetooth | 🟡 | controller present, down: BD address provisioning disabled in alpha1 |
+| GPU (Adreno 740, Freedreno/Turnip) | ✅ | SQE/GMU firmware loaded from the initramfs |
+| Audio (CS35L45) | ✅ | speakers play (owner confirmed) |
+| Battery / charging (SM5714) | ✅ | |
+| S Pen (WEZ01) | ✅ | position, pressure 0–4095, hover distance, **tilt X/Y** (measured −29…+35) |
+| Cameras (2× HI1337, DW9808 lens) | 🟡 | sensors and lens probe, CAMSS graph up; no app support until libcamera (stage B) |
+| Rear camera autofocus | — | lens controllable (focus_absolute 0–1023); AF loop comes with the Ultra libcamera (stage B) |
+| Hardware video decode | 🟡 | iris decoder up (`/dev/video17/18`), GStreamer `v4l2h264dec`/`v4l2vp9dec` present; playback test pending. Vulkan Video does not exist for Adreno on Linux |
+| Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
 | Rotation sensor | — | planned (stage B: hexagonrpcd, libssc) |
 | Fingerprint | — | |
 | Suspend | — | |

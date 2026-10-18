@@ -48,3 +48,23 @@ An AI agent produced a first set of images and a release. Reviewed on
   recipe and device services from the Fedora port; pin Linux 7.2.0.
 - Found that the Fedora port's 19 kernel patches are the S9 Ultra port's
   patches (11 of them adapted for the X710) — both ports share an origin.
+
+## 2026-10-18 — first boot: v0.2.0-pre1
+
+- Kernel 7.2.0-gts9wifi (v7.2 + Fedora recipe + Ubuntu fragment) built on the
+  Pi in ~2.5 h. Rootfs stage A: Ubuntu 24.04 GNOME, 3.4 GB. Boot bundle:
+  `init_boot.img`/`dtbo.img` byte-identical to the Fedora port's.
+- Release assets uploaded to GitHub (private pre-release) and pulled to the
+  test PC from there: 4 min 40 s instead of hours over Tailscale.
+- Writing the card through `adb exec-in … dd` inside Android ran at ~4 MB/s and
+  vold kept remounting the card mid-write. Writing it in the PC's microSD reader
+  took 7 min and was verified by reading back the sha256. **Write the card in a
+  card reader**, not through Android.
+- `to-ubuntu.sh` wrote and read back the four boot partitions; the tablet booted
+  straight into GDM. Root grew to 14 GB on first boot.
+- Working: display, touch, S Pen (with tilt), GPU firmware, Wi-Fi 2.4 GHz,
+  audio, battery, ADSP, USB network (172.16.42.1). AppArmor active.
+- 5 GHz RX weak → root-caused to the board-data entry (see KNOWN-ISSUES) and
+  fixed live on the tablet; fix moved into the rootfs build.
+- `gts9wifi-mem-reclaim` found to rewrite the boot partitions every boot;
+  disabled. `rmtfs` disabled (no modem).
