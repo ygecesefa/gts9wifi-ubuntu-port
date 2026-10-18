@@ -301,6 +301,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
 	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
 	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path \
+	gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service \
 	ssh.service NetworkManager.service; do
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done

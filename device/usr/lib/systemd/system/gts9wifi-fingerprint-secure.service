@@ -1,0 +1,29 @@
+[Unit]
+Description=Fingerprint secure start (SPU, Keymaster, HwVault), once per boot
+Documentation=file:///usr/libexec/gts9wifi-fingerprint-secure
+After=local-fs.target systemd-udev-settle.service gts9wifi-fingerprint-runtime.service
+After=vendor.mount vendor-firmware_mnt.mount
+Wants=gts9wifi-fingerprint-runtime.service
+Before=fprintd.service
+ConditionPathExists=/sys/bus/platform/devices/egis-el721
+ConditionPathExists=/var/lib/gts9wifi/fingerprint/SHA256SUMS
+# Secure world may keep DMA addresses of this owner: only a full reboot may
+# replace it, so neither failure nor upgrades restart or stop it.
+RefuseManualStop=yes
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/gts9wifi-fingerprint-secure --boot
+Restart=no
+UMask=0077
+RuntimeDirectory=gts9wifi-fingerprint-secure
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+LogsDirectory=gts9wifi-fingerprint-secure
+LogsDirectoryMode=0700
+LimitCORE=0
+TimeoutStopSec=10
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=multi-user.target

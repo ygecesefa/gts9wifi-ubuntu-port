@@ -1,0 +1,15 @@
+[Unit]
+Description=Copy the fingerprint secure-start runtime from this tablet's Android partitions
+Documentation=file:///usr/libexec/gts9wifi-fingerprint-runtime
+# vendor and apnhlos (firmware_mnt) are read-only mounts of Android partitions;
+# system is mapped read-only by the tool itself.
+After=vendor.mount vendor-firmware_mnt.mount
+Requires=vendor.mount vendor-firmware_mnt.mount
+ConditionPathExists=!/var/lib/gts9wifi/fingerprint/SHA256SUMS
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/gts9wifi-fingerprint-runtime assemble
+
+[Install]
+WantedBy=multi-user.target
