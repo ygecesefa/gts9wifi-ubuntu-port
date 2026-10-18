@@ -26,6 +26,9 @@ sensor_tree=${SENSOR_TREE_TARBALL:-$root/backups/firmware/sensor-hexagonfs-gts9w
 # libssc, hexagonrpcd (+sscregistrygen) and patched iio-sensor-proxy, built by
 # scripts/build-sensor-packages.sh (S9 Ultra port, adapted).
 sensor_debs=${SENSOR_DEB_DIR:-$root/build/gts9wifi-ultra/out/packages}
+# fingerprint/build-fingerprint-userspace.sh (EL721: libfprint, secure owner,
+# binder context manager, bionic shims).
+fp_out=${FINGERPRINT_OUT_DIR:-$root/build/gts9wifi-ultra/out/fingerprint}
 rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 suite=noble
 mirror=${UBUNTU_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
@@ -40,7 +43,8 @@ password=${GTS9WIFI_PW:?set GTS9WIFI_PW to the test user password}
 krel=$(cat "$kernel_out/kernel.release")
 for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/rootfs/overlay" "$sensor_tree" \
 	"$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb \
-	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb; do
+	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb \
+	"$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$fp_out"/SHA256SUMS; do
 	test -e "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 case "$rootfs" in
@@ -174,6 +178,20 @@ cp "$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/i
 	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb "$rootfs/tmp/gts9wifi-debs/"
 apt_in_rootfs /tmp/gts9wifi-debs/*.deb
 rm -rf "$rootfs/tmp/gts9wifi-debs"
+
+echo "== fingerprint (EL721): libfprint, fprintd, secure-start helpers"
+mkdir -p "$rootfs/tmp/gts9wifi-debs"
+cp "$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$rootfs/tmp/gts9wifi-debs/"
+apt_in_rootfs /tmp/gts9wifi-debs/*.deb fprintd libpam-fprintd
+rm -rf "$rootfs/tmp/gts9wifi-debs"
+# No fingerprint step in PAM until enrolment works on this tablet.
+chroot "$rootfs" pam-auth-update --disable fprintd
+(cd "$fp_out" && sha256sum -c --quiet SHA256SUMS)
+install -m0755 "$fp_out/gts9wifi-fingerprint-secure-owner" "$fp_out/gts9wifi-binder-ctxmgr" \
+	"$rootfs/usr/libexec/"
+install -d -m0755 "$rootfs/usr/lib/gts9wifi/fingerprint"
+install -m0644 "$fp_out/liblog_capture.so" "$fp_out/libvmmem_shim.so" \
+	"$rootfs/usr/lib/gts9wifi/fingerprint/"
 
 if ! chroot "$rootfs" dpkg -s linux-firmware >/dev/null 2>&1; then
 	echo "== installing linux-firmware into the existing rootfs"

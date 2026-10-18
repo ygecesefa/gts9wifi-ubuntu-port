@@ -39,6 +39,9 @@ LOG = Path('/var/log/gts9wifi-fingerprint-secure')
 OWNER = '/usr/libexec/gts9wifi-fingerprint-secure-owner'
 # This vendor's spdaemon waits for a context manager on /dev/vndbinder.
 CTXMGR = '/usr/libexec/gts9wifi-binder-ctxmgr'
+# This port's own bionic LD_PRELOAD shims (fingerprint/*.c); runtime/ holds
+# only what is copied from the tablet's Android partitions.
+SHIMS = Path('/usr/lib/gts9wifi/fingerprint')
 SPSS_UTILS_NAME = 'sys/devices/platform/soc/soc:qcom,spss_utils/firmware_name'
 MODULES = ('qcom_spss_irq', 'qcom_sp_hlos_heap', 'qcom_glink_spss',
            'qcom_spss', 'spss_utils', 'spcom', 'snvm', 'qcomtee')
@@ -72,8 +75,8 @@ def runtime_preflight():
         protected(path)
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f'runtime hash mismatch: {name}')
-    protected(RUNTIME / 'lib64/liblog_capture.so')
-    protected(RUNTIME / 'lib64/libvmmem_shim.so')
+    protected(SHIMS / 'liblog_capture.so')
+    protected(SHIMS / 'libvmmem_shim.so')
     protected(Path(OWNER))
     protected(Path(CTXMGR))
     for module in MODULES:
@@ -144,7 +147,7 @@ def daemon_argv(name):
     ever starts."""
     binds = ' && '.join(
         f'mount --bind {NVM / d} /mnt/vendor/{d}' for d in ('persist', 'spunvm'))
-    preload = ':'.join(str(RUNTIME / 'lib64' / so) for so in
+    preload = ':'.join(str(SHIMS / so) for so in
                        ('liblog_capture.so', 'libvmmem_shim.so'))
     android_env = f'LD_LIBRARY_PATH={RUNTIME / "lib64"} LD_PRELOAD={preload}'
     return ['unshare', '--mount', '--propagation', 'private', 'sh', '-c',

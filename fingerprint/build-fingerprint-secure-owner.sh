@@ -4,7 +4,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 base=${UBUNTU_WORKDIR:-$(dirname "$(dirname "$here")")/build/gts9wifi-ultra}
 buildroot=${BUILDROOT_DIR:-$base/buildroot}
-out=$base/out/fingerprint-secure
+out=$base/out/fingerprint
 mkdir -p "$out" "$buildroot/build/el721-secure-owner/input"
 cp -a "$here/libfprint/." "$buildroot/build/el721-secure-owner/input/"
 install -m0644 "$here/include/uapi/linux/spcom.h" "$buildroot/build/el721-secure-owner/spcom.h"
