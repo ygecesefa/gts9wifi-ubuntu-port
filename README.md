@@ -56,7 +56,7 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Display (ANA38407) | ✅ | DSI-1 2560×1600, backlight, GNOME on Wayland |
 | Touch (FTS1BA90A) | ✅ | |
 | Wi-Fi (WCN6855) | ✅ | 2.4 and 5 GHz; 5 GHz RX fixed via the correct board-data slot (see KNOWN-ISSUES) — fix built into the next image |
-| Bluetooth | 🟡 | controller present, down: BD address provisioning disabled in alpha1 |
+| Bluetooth | ✅ | unit address read from EFS (read-only) and set over mgmt at every boot; no boot-partition writes |
 | GPU (Adreno 740, Freedreno/Turnip) | ✅ | SQE/GMU firmware loaded from the initramfs |
 | Audio (CS35L45) | ✅ | speakers play (owner confirmed) |
 | Battery / charging (SM5714) | ✅ | |

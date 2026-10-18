@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+"""Minimal Bluetooth management-socket client for the gts9wifi.
+
+  gts9wifi-bt-mgmt public-addr INDEX AA:BB:CC:DD:EE:FF
+  gts9wifi-bt-mgmt power-on INDEX
+
+Speaks the kernel's mgmt protocol directly over an HCI control-channel
+socket.  btmgmt was unreliable from a service: it sometimes ignored its own
+--timeout and hung, leaving the controller unconfigured.  Every reply here is
+waited for with a hard deadline and checked for its status.
+"""
+import ctypes
+import socket
+import struct
+import sys
+import time
+
+AF_BLUETOOTH = 31
+BTPROTO_HCI = 1
+HCI_DEV_NONE = 0xFFFF
+HCI_CHANNEL_CONTROL = 3
+
+MGMT_EV_CMD_COMPLETE = 0x0001
+MGMT_EV_CMD_STATUS = 0x0002
+MGMT_OP_SET_POWERED = 0x0005
+MGMT_OP_SET_PUBLIC_ADDRESS = 0x0039
+
+STATUS = {0x00: 'success', 0x0b: 'rejected', 0x0c: 'not supported',
+          0x0d: 'invalid parameters', 0x11: 'invalid index', 0x0a: 'busy'}
+
+
+def control_socket():
+    sock = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW | socket.SOCK_CLOEXEC, BTPROTO_HCI)
+    addr = struct.pack('<HHH', AF_BLUETOOTH, HCI_DEV_NONE, HCI_CHANNEL_CONTROL)
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.bind(sock.fileno(), addr, len(addr)) != 0:
+        raise OSError(ctypes.get_errno(), 'bind to the mgmt control channel failed')
+    return sock
+
+
+def command(opcode, index, params, timeout=5.0):
+    sock = control_socket()
+    sock.send(struct.pack('<HHH', opcode, index, len(params)) + params)
+    deadline = time.monotonic() + timeout
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError(f'no reply to mgmt opcode 0x{opcode:04x}')
+        sock.settimeout(left)
+        data = sock.recv(1024)
+        event, ev_index, _ = struct.unpack_from('<HHH', data)
+        if event in (MGMT_EV_CMD_COMPLETE, MGMT_EV_CMD_STATUS) and ev_index == index:
+            op, status = struct.unpack_from('<HB', data, 6)
+            if op == opcode:
+                return status
+
+
+def main(argv):
+    if len(argv) >= 3 and argv[1] == 'public-addr' and len(argv) == 4:
+        index = int(argv[2])
+        octets = argv[3].split(':')
+        if len(octets) != 6:
+            sys.exit('bad address')
+        params = bytes(int(o, 16) for o in reversed(octets))  # little-endian
+        status = command(MGMT_OP_SET_PUBLIC_ADDRESS, index, params)
+    elif len(argv) == 3 and argv[1] == 'power-on':
+        status = command(MGMT_OP_SET_POWERED, int(argv[2]), b'\x01')
+    else:
+        sys.exit(__doc__)
+    print(STATUS.get(status, f'status 0x{status:02x}'))
+    return 0 if status == 0 else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

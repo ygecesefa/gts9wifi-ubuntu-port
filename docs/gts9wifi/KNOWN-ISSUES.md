@@ -51,7 +51,7 @@ next image afterwards.
 
 | # | Item | Origin | Needs |
 |---|---|---|---|
-| 1 | Bluetooth public address from `efs` at boot, without rewriting boot partitions | this port | live |
+| 1 | ~~Bluetooth public address from `efs` at boot~~ — **done** (`gts9wifi-bt-address` + `gts9wifi-bt-mgmt`), plus NTP (`systemd-timesyncd`) | this port | live |
 | 2 | Hardware video decode: verify iris H.264/VP9/HEVC through GStreamer, set up a player (Celluloid/mpv) to use it; browsers stay software (no VA-API for the VPU) | Fedora 16 | live |
 | 3 | Rotation sensor: `hexagonrpcd`, `libssc`, patched `iio-sensor-proxy` | Fedora 5 | live (packages) |
 | 4 | Cameras in apps + **rear autofocus**: S9 Ultra libcamera (software ISP, AF) with gts9wifi tuning for the two HI1337, `v4l2-relayd` | Fedora 4/4b/11 | live (packages) |

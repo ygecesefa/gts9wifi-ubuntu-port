@@ -14,8 +14,9 @@ set -euo pipefail
 
 EFS=/dev/disk/by-partlabel/efs
 
-# btmgmt waits for input when it has no terminal; bound every call.
-mgmt() { timeout 20 btmgmt -i hci0 --timeout 5 "$@" </dev/null; }
+# btmgmt sometimes hung from a service, ignoring its own --timeout; use a
+# small mgmt-socket client with hard deadlines instead.
+mgmt=/usr/libexec/gts9wifi-bt-mgmt
 
 for _ in $(seq 1 30); do
 	[ -e /sys/class/bluetooth/hci0 ] && break
@@ -38,9 +39,9 @@ fi
 current() { hciconfig hci0 2>/dev/null | awk '/BD Address/{print toupper($3)}'; }
 for _ in $(seq 1 30); do
 	[ "$(current)" = "${addr^^}" ] && break
-	mgmt public-addr "$addr" >/dev/null 2>&1 || true
+	timeout 10 "$mgmt" public-addr 0 "$addr" >/dev/null 2>&1 || true
 	sleep 2
 done
 [ "$(current)" = "${addr^^}" ] || { echo "controller did not accept the address" >&2; exit 1; }
-mgmt power on >/dev/null || true
+timeout 10 "$mgmt" power-on 0 >/dev/null || true
 echo "hci0 address set from EFS (…${addr: -5})"
