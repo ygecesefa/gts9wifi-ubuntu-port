@@ -52,6 +52,7 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Area | v0.2.0-alpha1 | Notes |
 |---|---|---|
 | Boot from microSD | ✅ | first boot 2026-10-18; root grown to the whole card |
+| Dual boot Android ↔ Ubuntu | ✅ | both directions verified on the tablet; one-tap "Switch to Android" in the dock |
 | Display (ANA38407) | ✅ | DSI-1 2560×1600, backlight, GNOME on Wayland |
 | Touch (FTS1BA90A) | ✅ | |
 | Wi-Fi (WCN6855) | ✅ | 2.4 and 5 GHz; 5 GHz RX fixed via the correct board-data slot (see KNOWN-ISSUES) — fix built into the next image |

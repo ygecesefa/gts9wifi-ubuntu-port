@@ -68,3 +68,7 @@ An AI agent produced a first set of images and a release. Reviewed on
   fixed live on the tablet; fix moved into the rootfs build.
 - `gts9wifi-mem-reclaim` found to rewrite the boot partitions every boot;
   disabled. `rmtfs` disabled (no modem).
+- Ubuntu → Android verified: the one-tap "Android'e Geç" launcher (no terminal,
+  no password, no prompt) restored the four Android images; Android booted and
+  its boot partitions read back identical to the backup. Dual boot works in
+  both directions.
