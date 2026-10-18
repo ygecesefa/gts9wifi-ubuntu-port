@@ -1,6 +1,6 @@
 {
   "uuid": "gnome-gts9wifi@tabs9linux",
-  "name": "gnome-gts9wifi",
+  "name": "Tab9 Extras",
   "description": "Device-specific controls for the Galaxy Tab S9 Wi-Fi (SM-X710) Linux ports (Ubuntu and Fedora). Adds its own settings page (double tap to wake, charging) and helps the on-screen keyboard: opens it for Chromium text fields and adds a floating keyboard button.",
   "shell-version": [
     "46",
@@ -9,7 +9,7 @@
     "49",
     "50"
   ],
-  "version": 4,
+  "version": 5,
   "settings-schema": "org.gnome.shell.extensions.gts9wifi",
   "session-modes": [
     "user",

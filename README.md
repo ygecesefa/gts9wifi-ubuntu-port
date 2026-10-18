@@ -84,8 +84,8 @@ This table is only updated from tests on the real tablet.
   (XWayland/X11 apps, Wine), and it types into them.
 - **Power key:** press and release to suspend, press again to wake; hold it
   for about a second for the Restart / Power Off menu.
-- **Double tap to wake:** on by default; toggle it in the *gnome-gts9wifi*
-  extension's settings (Extensions app).
+- **Double tap to wake:** on by default; toggle it in the *Tab9 Extras* app
+  (app grid; it is the gnome-gts9wifi extension's settings page).
 - Electron apps (VS Code, Discord, …) open the keyboard only when started on
   Wayland with `--ozone-platform=wayland --enable-wayland-ime`.
 

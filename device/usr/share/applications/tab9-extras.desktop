@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Tab9 Extras
+Name[tr]=Tab9 Extras
+Comment=Galaxy Tab S9 settings: charging, double tap to wake, keyboard button
+Comment[tr]=Galaxy Tab S9 ayarları: şarj, çift dokunarak uyandırma, klavye düğmesi
+# The device settings page of the Tab9 Extras GNOME extension
+# (gnome-gts9wifi@tabs9linux), as its own app-grid entry.
+Exec=gnome-extensions prefs gnome-gts9wifi@tabs9linux
+Icon=preferences-desktop-peripherals
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=tablet;charging;battery;keyboard;double tap;tab;s9;
