@@ -1,0 +1,6 @@
+[Unit]
+Description=Save the wall clock - PMIC RTC offset after a time sync
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/gts9wifi-rtc-offset save

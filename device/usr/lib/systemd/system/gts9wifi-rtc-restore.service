@@ -1,0 +1,18 @@
+[Unit]
+Description=Set the clock from the PMIC RTC and the saved offset
+Documentation=file:///usr/libexec/gts9wifi-rtc-offset
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=systemd-timesyncd.service time-set.target sysinit.target shutdown.target
+Conflicts=shutdown.target
+ConditionPathExists=/sys/class/rtc/rtc0/since_epoch
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/gts9wifi-rtc-offset restore
+# Save once more on the way down (still synchronised from this boot).
+ExecStop=/usr/libexec/gts9wifi-rtc-offset save
+
+[Install]
+WantedBy=sysinit.target

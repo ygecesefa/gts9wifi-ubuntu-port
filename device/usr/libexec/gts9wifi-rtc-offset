@@ -1,0 +1,38 @@
+#!/bin/sh
+# The PMIC RTC (rtc-pm8xxx) cannot be set: it counts seconds since its last
+# reset and reads as 1970.  It keeps counting while the tablet is off or in
+# Android, so the wall clock is the RTC plus an offset, as Android's own
+# time_daemon does it.
+#
+#   save     store wall clock - RTC; only while NTP-synchronised
+#   restore  set the clock to RTC + stored offset (early boot)
+#
+# Without this the clock starts from the last shutdown (timesyncd's clock
+# file) and is wrong until the network is up.
+set -eu
+rtc=/sys/class/rtc/rtc0/since_epoch
+state=/var/lib/gts9wifi/rtc-offset
+
+case "${1:-}" in
+save)
+	[ "$(timedatectl show -p NTPSynchronized --value)" = yes ] || exit 0
+	offset=$(( $(date +%s) - $(cat "$rtc") ))
+	mkdir -p "${state%/*}"
+	echo "$offset" > "$state.new"
+	mv "$state.new" "$state"
+	;;
+restore)
+	[ -r "$state" ] || exit 0
+	offset=$(cat "$state")
+	case "$offset" in ''|*[!0-9]*) exit 0 ;; esac
+	now=$(( $(cat "$rtc") + offset ))
+	# Never step back: the clock may already be later (timesyncd's clock file).
+	[ "$now" -gt "$(date +%s)" ] || exit 0
+	date -u -s "@$now" > /dev/null
+	echo "clock set from RTC + offset: $(date -u -d "@$now")"
+	;;
+*)
+	echo "usage: $0 save|restore" >&2
+	exit 2
+	;;
+esac

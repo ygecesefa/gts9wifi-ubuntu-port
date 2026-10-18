@@ -1,0 +1,10 @@
+[Unit]
+Description=Save the RTC offset whenever systemd-timesyncd synchronises
+
+[Path]
+# timesyncd touches this file on every successful synchronisation.
+PathChanged=/var/lib/systemd/timesync/clock
+Unit=gts9wifi-rtc-save.service
+
+[Install]
+WantedBy=multi-user.target
