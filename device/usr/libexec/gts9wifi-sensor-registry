@@ -1,0 +1,14 @@
+#!/bin/sh
+# Keep the sensor HexagonFS tree as Samsung's registry service expects it
+# (adapted from the S9 Ultra port's ubuntu-gts9u-sensor-registry): every
+# timestamp at the epoch, matching the cached values, and the tree owned by the
+# unprivileged fastrpc user the firmware writes its registry cache as.
+set -eu
+tree=/usr/share/qcom/sm8550/Samsung/gts9wifi
+[ -d "$tree" ] || exit 0
+find "$tree" -exec touch -h -d @0 {} +
+if getent passwd fastrpc >/dev/null 2>&1; then
+	chown -R fastrpc:fastrpc "$tree"
+fi
+[ -e "$tree/sensors/registry/sensors_registry" ] || \
+	echo "gts9wifi-sensor-registry: completion marker missing; the DSP will rebuild the registry" >&2

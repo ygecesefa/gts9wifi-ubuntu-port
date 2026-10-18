@@ -1,0 +1,13 @@
+[Unit]
+Description=Normalise the gts9wifi sensor registry tree before the DSP reads it
+After=local-fs.target
+Before=hexagonrpcd-adsp-sensorspd.service
+ConditionPathIsDirectory=/usr/share/qcom/sm8550/Samsung/gts9wifi
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/gts9wifi-sensor-registry
+
+[Install]
+WantedBy=multi-user.target

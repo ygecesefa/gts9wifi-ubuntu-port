@@ -1,0 +1,9 @@
+#!/bin/sh
+# Wait, bounded, for the ADSP sensor protection domain to publish the SSC QMI
+# service (QRTR service 400) so iio-sensor-proxy finds the sensors.
+for _ in $(seq 1 60); do
+	qrtr-lookup 2>/dev/null | awk '$1 == 400 { found = 1 } END { exit !found }' && exit 0
+	sleep 1
+done
+echo "SSC not published after 60 s; starting iio-sensor-proxy anyway" >&2
+exit 0

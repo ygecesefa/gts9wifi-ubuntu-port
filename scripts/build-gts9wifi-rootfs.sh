@@ -20,6 +20,12 @@ root=${GTS9WIFI_ROOT:-$(dirname "$repo")}
 fedora=${FEDORA_REF:-$root/fedora-ref}
 kernel_out=${KERNEL_OUT_DIR:-$root/build/gts9wifi-kernel/out}
 firmware_tar=${FIRMWARE_TARBALL:-$root/backups/firmware/firmware-gts9wifi-from-fedora-sd.tar.gz}
+# HexagonFS sensor tree generated on the tablet by gts9wifi-sensor-hexagonfs
+# from its own vendor and dsp partitions (not redistributable source).
+sensor_tree=${SENSOR_TREE_TARBALL:-$root/backups/firmware/sensor-hexagonfs-gts9wifi.tar.gz}
+# libssc, hexagonrpcd (+sscregistrygen) and patched iio-sensor-proxy, built by
+# scripts/build-sensor-packages.sh (S9 Ultra port, adapted).
+sensor_debs=${SENSOR_DEB_DIR:-$root/build/gts9wifi-ultra/out/packages}
 rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 suite=noble
 mirror=${UBUNTU_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
@@ -32,7 +38,8 @@ password=${GTS9WIFI_PW:?set GTS9WIFI_PW to the test user password}
 
 [ "$(id -u)" = 0 ] || { echo 'run as root' >&2; exit 1; }
 krel=$(cat "$kernel_out/kernel.release")
-for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/rootfs/overlay"; do
+for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/rootfs/overlay" "$sensor_tree" \
+	"$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb; do
 	test -e "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 case "$rootfs" in
@@ -144,6 +151,27 @@ fi
 
 # Generic firmware under the device payload, as the Fedora port does.  Rootfs
 # trees bootstrapped before linux-firmware was in the package set get it here.
+apt_in_rootfs() {
+	for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
+	saved=0
+	if [ -e "$rootfs/etc/resolv.conf" ] || [ -L "$rootfs/etc/resolv.conf" ]; then
+		mv "$rootfs/etc/resolv.conf" "$rootfs/etc/resolv.conf.gts9wifi-build"; saved=1
+	fi
+	cp -L /etc/resolv.conf "$rootfs/etc/resolv.conf"
+	chroot "$rootfs" apt-get -o APT::Sandbox::User=root update -qq
+	chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@"
+	chroot "$rootfs" apt-get clean
+	rm -f "$rootfs/etc/resolv.conf"
+	[ "$saved" = 0 ] || mv "$rootfs/etc/resolv.conf.gts9wifi-build" "$rootfs/etc/resolv.conf"
+	for d in dev sys proc; do umount "$rootfs/$d"; done
+}
+
+echo "== sensor packages (libssc, hexagonrpcd, iio-sensor-proxy)"
+mkdir -p "$rootfs/tmp/gts9wifi-debs"
+cp "$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb "$rootfs/tmp/gts9wifi-debs/"
+apt_in_rootfs /tmp/gts9wifi-debs/*.deb
+rm -rf "$rootfs/tmp/gts9wifi-debs"
+
 if ! chroot "$rootfs" dpkg -s linux-firmware >/dev/null 2>&1; then
 	echo "== installing linux-firmware into the existing rootfs"
 	for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
@@ -237,6 +265,13 @@ grep -q noload "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount" && \
 sed -i 's/fedora-gts9wifi/ubuntu-gts9wifi/' "$rootfs/usr/libexec/gts9wifi-usb-gadget"
 mkdir -p "$rootfs/vendor/dsp" "$rootfs/vendor/firmware_mnt" "$rootfs/mnt/vendor/persist"
 
+# Sensor HexagonFS tree, owned by the unprivileged fastrpc user the DSP writes
+# its registry cache as (gts9wifi-sensor-registry repeats this at boot).
+install -d "$rootfs/usr/share/qcom/sm8550/Samsung"
+rm -rf "$rootfs/usr/share/qcom/sm8550/Samsung/gts9wifi"
+tar -xzf "$sensor_tree" -C "$rootfs/usr/share/qcom/sm8550/Samsung" --no-same-owner
+chroot "$rootfs" chown -R fastrpc:fastrpc /usr/share/qcom/sm8550/Samsung/gts9wifi
+
 # Ubuntu -> Android switch: the Android boot set saved before installation.
 android=${ANDROID_BACKUP_DIR:-$root/backups/android-20261017}
 db=$rootfs/usr/share/gts9wifi-dualboot/android
@@ -261,6 +296,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-wifi-recover.service \
 	gts9wifi-x11-dir-fix.path vendor-dsp.mount vendor-firmware_mnt.mount \
 	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
+	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
 	ssh.service NetworkManager.service; do
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done

@@ -53,7 +53,7 @@ next image afterwards.
 |---|---|---|---|
 | 1 | ~~Bluetooth public address from `efs` at boot~~ — **done** (`gts9wifi-bt-address` + `gts9wifi-bt-mgmt`), plus NTP (`systemd-timesyncd`) | this port | live |
 | 2 | ~~Hardware video decode~~ — **done**: iris decodes H.264/HEVC/VP9 and encodes H.264/HEVC; GStreamer ranks it first so Totem uses it with no setup. Open: browsers (no VA-API for the VPU), mpv/VLC configuration | Fedora 16 | live |
-| 3 | Rotation sensor: `hexagonrpcd`, `libssc`, patched `iio-sensor-proxy` | Fedora 5 | live (packages) |
+| 3 | ~~Rotation sensor~~ — **done**: accelerometer, ambient light and compass; sensor PD started once per boot after the ADSP and the panel cold-boot recovery (the race that hung Fedora), iio-sensor-proxy waits for SSC | Fedora 5 | live (packages) |
 | 4 | Cameras in apps + **rear autofocus**: S9 Ultra libcamera (software ISP, AF) with gts9wifi tuning for the two HI1337, `v4l2-relayd` | Fedora 4/4b/11 | live (packages) |
 | 5 | Double-tap to wake + device-control GNOME extension (port to GNOME 46) | Fedora 14 | live |
 | 6 | ~~`/vendor`~~ — **done**: `gts9wifi-android-parts` parses super's liblp metadata, maps `vendor` read-only with dm-linear; mounted `ro,noload`. Also fixed: `dsp` and `persist` were mounted without `noload`, so a dirty journal would have been replayed onto the Android partitions | Fedora open | live |

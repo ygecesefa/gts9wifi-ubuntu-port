@@ -66,7 +66,8 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Hardware video decode | ✅ | iris VPU: H.264, HEVC, VP9 1080p, 300/300 frames, ~10–15× less CPU than software; GStreamer picks it automatically (GNOME Videos/Totem). Browsers still decode in software (no VA-API for the VPU) |
 | Hardware video encode | ✅ | iris VPU: H.264 and HEVC 1080p at ~170–300 fps (`v4l2h264enc`/`v4l2h265enc`) |
 | Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
-| Rotation sensor | — | planned (stage B: hexagonrpcd, libssc) |
+| Rotation, ambient light, compass | ✅ | ADSP sensors through hexagonrpcd + libssc + patched iio-sensor-proxy (from the S9 Ultra port); HexagonFS tree generated from the tablet's own vendor/dsp. Screen rotates in GNOME |
+| Vulkan | ✅ | Turnip Adreno 740, Mesa 25.2.8, Vulkan 1.4. No Vulkan Video (Turnip implements none) |
 | Fingerprint | — | |
 | Suspend | — | |
 
