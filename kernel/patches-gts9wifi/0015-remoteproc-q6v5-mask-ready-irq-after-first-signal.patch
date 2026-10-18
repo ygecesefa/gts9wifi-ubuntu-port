@@ -1,0 +1,54 @@
+From: gts9wifi Ubuntu port
+Subject: [PATCH] remoteproc: qcom_q6v5: mask the ready IRQ after the first signal
+
+With the handover IRQ masked (Ultra's q6v5 patch, 0009) the SM8550 ADSP
+on the X710 still pulses its SMP2P "ready" edge: 342 interrupts in the
+first ~67 s after the ADSP came up, ~5/s for the whole uptime, each one
+waking a CPU for a completion that was already done.
+
+Mask it after the first signal and unmask it in qcom_q6v5_prepare(), so
+every remoteproc start still sees exactly one ready completion.  Not yet
+built or tested on the tablet: goes in with the next kernel build.
+
+---
+--- a/drivers/remoteproc/qcom_q6v5.h	2026-10-19 01:01:24.262092669 +0300
++++ b/drivers/remoteproc/qcom_q6v5.h	2026-10-19 01:01:24.278103293 +0300
+@@ -30,6 +30,7 @@
+ 	int stop_irq;
+ 
+ 	bool handover_issued;
++	bool ready_masked;
+ 
+ 	struct completion start_done;
+ 	struct completion stop_done;
+--- a/drivers/remoteproc/qcom_q6v5.c	2026-10-19 01:01:24.260063820 +0300
++++ b/drivers/remoteproc/qcom_q6v5.c	2026-10-19 01:01:24.278186848 +0300
+@@ -65,6 +65,10 @@
+ 	q6v5->handover_issued = false;
+ 
+ 	enable_irq(q6v5->handover_irq);
++	if (q6v5->ready_masked) {
++		q6v5->ready_masked = false;
++		enable_irq(q6v5->ready_irq);
++	}
+ 
+ 	return 0;
+ }
+@@ -140,6 +144,17 @@
+ 
+ 	complete(&q6v5->start_done);
+ 
++	/*
++	 * Like handover, ready is one notification per start, but Samsung's
++	 * SM8550 ADSP keeps pulsing it (about five times a second on the
++	 * SM-X710), waking a CPU each time.  Mask it once the start is
++	 * signalled; prepare() unmasks it for the next start.
++	 */
++	if (!q6v5->ready_masked) {
++		q6v5->ready_masked = true;
++		disable_irq_nosync(irq);
++	}
++
+ 	return IRQ_HANDLED;
+ }
+ 
