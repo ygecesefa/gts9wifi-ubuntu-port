@@ -72,3 +72,65 @@ An AI agent produced a first set of images and a release. Reviewed on
   no password, no prompt) restored the four Android images; Android booted and
   its boot partitions read back identical to the backup. Dual boot works in
   both directions.
+
+## 2026-10-18 — live fixes on the running tablet (towards v0.2.0-pre2)
+
+Everything below was done over SSH on the booted Ubuntu, verified on the
+tablet, and folded into the build (`device/`, `scripts/build-gts9wifi-rootfs.sh`)
+so the next image carries it.
+
+**Access.** Tailscale on the tablet; the build host reaches it directly
+(`ssh gts9wifi`), the USB network of the test PC is only needed for Android.
+
+**Dual boot, both directions.** One-tap "Android'e Geç" in the dock (no
+terminal, no password, no prompt) and a Termux:Widget `Ubuntu.sh` on Android.
+Leftover Fedora switch scripts and images removed from Android (their
+`Fedora.sh` would have booted a Fedora that no longer exists).
+
+**Wi-Fi 5 GHz.** RX ~40 dB weak. This unit's WCN6855 reports
+`qmi-chip-id=2`; the Fedora fix had put the tuned NTM_TW220 board data only in
+the `qmi-chip-id=18` entry. Tuned payload copied into the chip-id=2 entry: a
+phone hotspot at 1 m went from −83 dBm to −41…−50 dBm.
+
+**Bluetooth.** The controller came up unconfigured (`DOWN RAW`). The address is
+read from `efs:/bluetooth/bt_addr` (mounted `ro,noload`) and set over the mgmt
+socket by `gts9wifi-bt-mgmt`, triggered by udev on `hci0`. `btmgmt` was tried
+first and dropped: from a service it sometimes ignored its own `--timeout` and
+hung. Nothing is written to the boot partitions (the Fedora port patched the
+DTB inside `boot`/`vendor_boot` every boot).
+
+**Clock.** No NTP client was installed; `systemd-timesyncd` added. The PMIC RTC
+reads 1970 and is not written; timesyncd's saved clock keeps boots sane.
+
+**Android partitions.** ~90 UFS partitions (incl. `efs`, `persist`, encrypted
+`userdata`) were offered in the dock; hidden with `UDISKS_IGNORE`.
+`/vendor` is now mounted: `gts9wifi-android-parts` parses the liblp metadata
+of `super` (system, vendor, product, odm, system_ext, vendor_dlkm,
+system_dlkm) and maps `vendor` read-only with dm-linear (ext4 here). The
+Fedora units mounted `dsp` and `persist` read-only but without `noload`, which
+lets ext4 replay a dirty journal onto the Android partition; all three now use
+`noload`. `userdata` decryption was assessed and not pursued: FBE keys are
+hardware-wrapped and need Samsung's keymaster/gatekeeper in TrustZone.
+
+**Video.** The iris VPU decodes H.264, HEVC and VP9 (1080p, 300/300 frames,
+~0.24 s CPU vs 2.2–3.7 s in software) and encodes H.264/HEVC at ~170–300 fps.
+The V4L2 decoders rank primary+1, so GStreamer/Totem use them automatically.
+Browsers still decode in software (no VA-API for the VPU). Vulkan works
+(Turnip, Mesa 25.2.8); Turnip implements no Vulkan Video.
+
+**Sensors.** Rotation, ambient light and compass work. Packages from the S9
+Ultra port (`libssc`, `hexagonrpcd` 0.4.0 with Samsung registry patches,
+patched `iio-sensor-proxy`), plus `sscregistrygen`. The HexagonFS tree is
+generated on the tablet from its own vendor sensor JSONs and dsp skels. The
+sensor PD is started once per boot after the ADSP, pd-mapper and the panel
+cold-boot recovery (starting inside that suspend cycle hung the Fedora port);
+iio-sensor-proxy waits for the SSC QMI service and is D-Bus activatable.
+Verified across cold boots: the screen rotates, no hang, audio unaffected.
+
+**Disabled as unsafe.** `gts9wifi-mem-reclaim` (rewrote the DTB in the boot
+partitions every boot), `gts9wifi-bt-provision` (same), `rmtfs` (no modem).
+
+**Still open (live):** cameras in apps + rear autofocus, double-tap wake and
+the device-control extension, fingerprint. **Kernel/image:** charging bypass
+and limit, DTB carveout reclaim, S9 Ultra SoC patches, image v0.2.0-pre2,
+boot-time key choice, TWRP + installer ZIP.

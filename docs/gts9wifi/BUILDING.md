@@ -44,6 +44,18 @@ regulatory.db  regulatory.db.p7s
 alpha1 was built from tarball sha256
 `05a60fa7d0686a6a982a5471765434468cd24f92cfcd00aafaaba2eaac86462d`.
 
+The ADSP sensor tree (HexagonFS) is generated **on the tablet** from its own
+`vendor` and `dsp` partitions, which Ubuntu mounts read-only:
+
+```sh
+sudo /usr/libexec/gts9wifi-sensor-hexagonfs /tmp/x/gts9wifi
+cd /tmp/x && sudo tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+    --numeric-owner -czf sensor-hexagonfs-gts9wifi.tar.gz gts9wifi
+```
+
+Store it as `backups/firmware/sensor-hexagonfs-gts9wifi.tar.gz`
+(v0.2.0-pre2: sha256 `6b0e51d9640ce92da30540ad0ac3ac5269c7bbe16551632fa7245c16033dcf91`).
+
 You also need your own Android boot-set backup in `backups/android-<date>/`
 (see [DUALBOOT.md](DUALBOOT.md)); it is embedded in the rootfs for the
 Ubuntu → Android switch.
@@ -54,13 +66,18 @@ Ubuntu → Android switch.
 # 1. kernel: v7.2 + Fedora gts9wifi recipe + Ubuntu fragment   (hours on a Pi)
 bash scripts/build-gts9wifi-kernel.sh
 
-# 2. Ubuntu 24.04 GNOME rootfs (stage A), modules, firmware, initramfs
+# 2. sensor packages: libssc, hexagonrpcd (+ sscregistrygen), patched iio-sensor-proxy
+sudo UBUNTU_WORKDIR=$PWD/../build/gts9wifi-ultra bash scripts/build-sensor-packages.sh
+
+# 3. Ubuntu 24.04 GNOME rootfs, modules, firmware, sensors, device services, initramfs
+#    (SKIP_BOOTSTRAP=1 reuses a finished package installation)
 sudo GTS9WIFI_PW='<test password>' bash scripts/build-gts9wifi-rootfs.sh
 
-# 3. Android boot header v4 images: boot, init_boot, vendor_boot, dtbo
+# 4. Android boot header v4 images: boot, init_boot, vendor_boot, dtbo
 bash scripts/build-gts9wifi-bundle.sh
+python3 scripts/verify-gts9wifi-bundle.py ../build/gts9wifi-bundle ../build/gts9wifi-kernel/out
 
-# 4. microSD image (+ .zst and SHA256SUMS)
+# 5. microSD image (+ .zst and SHA256SUMS)
 sudo bash scripts/build-gts9wifi-sd-image.sh
 ```
 
@@ -70,6 +87,7 @@ Outputs:
 |---|---|
 | kernel | `build/gts9wifi-kernel/out/{Image.gz,sm8550-samsung-gts9wifi.dtb,config,kernel.release,modules-root/}` |
 | rootfs | `build/gts9wifi-rootfs/` |
+| sensor packages | `build/gts9wifi-ultra/out/packages/{libssc,hexagonrpcd,iio-sensor-proxy}_*.deb` |
 | bundle | `build/gts9wifi-bundle/{boot,init_boot,vendor_boot,dtbo}.img`, `SHA256SUMS` |
 | SD image | `build/gts9wifi-sd.img`, `.zst`, `.SHA256SUMS` |
 
