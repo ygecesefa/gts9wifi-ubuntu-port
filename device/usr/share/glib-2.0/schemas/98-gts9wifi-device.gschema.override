@@ -6,7 +6,8 @@
 [org.gnome.shell]
 enabled-extensions=['gnome-gts9wifi@tabs9linux']
 
-# A short press of the power key suspends, as on Android; the shutdown dialog
-# stays one tap away in the top-right menu.
+# The power key is handled by gts9wifi-power-key (short press suspends, long
+# press opens the power menu, as on Android); GNOME acts on key-down and would
+# suspend before a long press is seen.
 [org.gnome.settings-daemon.plugins.power]
-power-button-action='suspend'
+power-button-action='nothing'

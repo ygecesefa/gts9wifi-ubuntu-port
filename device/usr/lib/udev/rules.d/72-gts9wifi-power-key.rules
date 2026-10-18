@@ -1,0 +1,3 @@
+# Let the seat's user read the power key: gts9wifi-power-key runs in the
+# GNOME session and tells a short press (suspend) from a long one (power menu).
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="pmic_pwrkey", TAG+="uaccess"

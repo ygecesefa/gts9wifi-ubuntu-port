@@ -1,0 +1,12 @@
+[Unit]
+Description=Tab S9 power key: short press suspends, long press opens the power menu
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/gts9wifi-power-key
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

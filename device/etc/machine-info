@@ -1,0 +1,6 @@
+# The kernel reports this tablet's chassis as "tablet", and on a tablet
+# gsd-media-keys suspends on power-key down whatever power-button-action
+# says, so a long press could never reach the power menu.  "convertible"
+# leaves the key to gts9wifi-power-key (short press suspends, hold opens
+# the power menu).
+CHASSIS=convertible

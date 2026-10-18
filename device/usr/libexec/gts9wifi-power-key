@@ -1,0 +1,147 @@
+#!/usr/bin/python3
+# Power key for the GNOME session on the Tab S9 (X710), like Android:
+#   short press  -> suspend
+#   hold 0.7 s   -> GNOME's power-off dialog (Restart / Power Off)
+# GNOME's own handling is off (power-button-action='nothing') because it acts
+# on key-down, before a long press can be told apart.  The press that wakes
+# the tablet reaches us after resume; it is recognised and dropped, so waking
+# does not suspend again: time was spent suspended since the last press
+# (BOOTTIME - MONOTONIC grew; the kernel updates it before tasks thaw, unlike
+# suspend_stats) and the wake IRQ was the power key's.
+import os
+import struct
+import sys
+import time
+
+from gi.repository import Gio, GLib
+
+EVENT = struct.Struct('llHHi')
+EV_KEY, KEY_POWER = 1, 116
+LONG_MS = 700
+
+
+def find_device():
+    for name in sorted(os.listdir('/sys/class/input')):
+        if not name.startswith('event'):
+            continue
+        try:
+            with open(f'/sys/class/input/{name}/device/name') as f:
+                if f.read().strip() == 'pmic_pwrkey':
+                    return f'/dev/input/{name}'
+        except OSError:
+            pass
+    return None
+
+
+def pwrkey_irq():
+    with open('/proc/interrupts') as f:
+        for line in f:
+            if line.rstrip().endswith('pmic_pwrkey'):
+                return line.split(':', 1)[0].strip()
+    return None
+
+
+def asleep():
+    """Seconds spent suspended since boot."""
+    return time.clock_gettime(time.CLOCK_BOOTTIME) - \
+        time.clock_gettime(time.CLOCK_MONOTONIC)
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+class PowerKey:
+    def __init__(self, dev):
+        self.fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
+        self.irq = pwrkey_irq()
+        self.asleep = asleep()
+        self.timer = 0
+        self.ignore_release = False
+        self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+        self.session = Gio.bus_get_sync(Gio.BusType.SESSION)
+        GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, self.fd,
+                              GLib.IOCondition.IN, self.on_input)
+
+    def woke_by_this_key(self):
+        slept = asleep()
+        if slept - self.asleep < 0.05:
+            return False
+        self.asleep = slept
+        return self.irq is not None and \
+            read('/sys/power/pm_wakeup_irq') == self.irq
+
+    def on_input(self, fd, cond):
+        try:
+            data = os.read(fd, EVENT.size * 64)
+        except BlockingIOError:
+            return True
+        for off in range(0, len(data) - EVENT.size + 1, EVENT.size):
+            _, _, etype, code, value = EVENT.unpack_from(data, off)
+            if etype == EV_KEY and code == KEY_POWER:
+                if value == 1:
+                    self.pressed()
+                elif value == 0:
+                    self.released()
+        return True
+
+    def pressed(self):
+        if self.woke_by_this_key():
+            self.ignore_release = True
+            return
+        self.cancel()
+        self.timer = GLib.timeout_add(LONG_MS, self.long_press)
+
+    def released(self):
+        if self.ignore_release:
+            self.ignore_release = False
+            return
+        if self.timer:
+            self.cancel()
+            self.call(self.system, 'org.freedesktop.login1',
+                      '/org/freedesktop/login1',
+                      'org.freedesktop.login1.Manager', 'Suspend',
+                      GLib.Variant('(b)', (False,)))
+
+    def long_press(self):
+        self.timer = 0
+        self.call(self.session, 'org.gnome.SessionManager',
+                  '/org/gnome/SessionManager', 'org.gnome.SessionManager',
+                  'Shutdown', None)
+        return False
+
+    def cancel(self):
+        if self.timer:
+            GLib.source_remove(self.timer)
+            self.timer = 0
+
+    @staticmethod
+    def call(bus, name, path, iface, method, args):
+        bus.call(name, path, iface, method, args, None,
+                 Gio.DBusCallFlags.NONE, -1, None,
+                 lambda b, res: PowerKey.done(b, res, method))
+
+    @staticmethod
+    def done(bus, res, method):
+        try:
+            bus.call_finish(res)
+        except GLib.Error as e:
+            print(f'{method} failed: {e.message}', file=sys.stderr)
+
+
+def main():
+    dev = find_device()
+    if dev is None:
+        print('pmic_pwrkey input device not found', file=sys.stderr)
+        return 1
+    PowerKey(dev)
+    GLib.MainLoop().run()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
