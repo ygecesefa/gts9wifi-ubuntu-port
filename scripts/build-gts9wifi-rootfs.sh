@@ -184,8 +184,10 @@ mkdir -p "$rootfs/tmp/gts9wifi-debs"
 cp "$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$rootfs/tmp/gts9wifi-debs/"
 apt_in_rootfs /tmp/gts9wifi-debs/*.deb fprintd libpam-fprintd
 rm -rf "$rootfs/tmp/gts9wifi-debs"
-# No fingerprint step in PAM until enrolment works on this tablet.
-chroot "$rootfs" pam-auth-update --disable fprintd
+# Fingerprint as an alternative to the password (sudo, polkit, unlock).
+# pam_fprintd falls through to the password after a timeout or a mismatch,
+# and does nothing for users with no enrolled finger.
+chroot "$rootfs" pam-auth-update --enable fprintd
 (cd "$fp_out" && sha256sum -c --quiet SHA256SUMS)
 install -m0755 "$fp_out/gts9wifi-fingerprint-secure-owner" "$fp_out/gts9wifi-binder-ctxmgr" \
 	"$rootfs/usr/libexec/"

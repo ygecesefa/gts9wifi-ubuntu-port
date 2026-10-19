@@ -68,7 +68,7 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
 | Rotation, ambient light, compass | ✅ | ADSP sensors through hexagonrpcd + libssc + patched iio-sensor-proxy (from the S9 Ultra port); HexagonFS tree generated from the tablet's own vendor/dsp. Screen rotates in GNOME |
 | Vulkan | ✅ | Turnip Adreno 740, Mesa 25.2.8, Vulkan 1.4. No Vulkan Video (Turnip implements none) |
-| Fingerprint | — | |
+| Fingerprint | ✅ | under-display EL721: enrol in Settings → Users (~17 touches; the progress picture does not move yet), then unlock, sudo and polkit accept it. Needs the tablet's own calibration files from Android (see KNOWN-ISSUES #8) |
 | Suspend / wake | ✅ | s2idle; power key wakes instantly, double tap to wake in under 1 s. Live on the tablet, in the next image (the double-tap driver fix needs the next kernel) |
 | Power key | ✅ | press and release: suspend · hold: Restart / Power Off menu |
 | On-screen keyboard | ✅ | opens on tapping a text field in GTK apps, Chromium and Firefox; not in XWayland (X11) apps — see below |
