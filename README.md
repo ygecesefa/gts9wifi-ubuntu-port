@@ -65,7 +65,7 @@ Legend: ✅ confirmed on the tablet · 🧪 built, not yet tested on the tablet 
 | Rear camera autofocus | ✅ | continuous AF (S9 Ultra libcamera software AF on the DW9808) |
 | Hardware video decode | ✅ | iris VPU: H.264, HEVC, VP9 1080p, 300/300 frames, ~10–15× less CPU than software; GStreamer picks it automatically (GNOME Videos/Totem). Browsers still decode in software (no VA-API for the VPU) |
 | Hardware video encode | ✅ | iris VPU: H.264 and HEVC 1080p at ~170–300 fps (`v4l2h264enc`/`v4l2h265enc`) |
-| Charging bypass UI | — | the SM5714 driver exposes no charge behaviour yet |
+| Charge limit / bypass | ✅ | 80 % limit and charge bypass on the SM5714 (kernel patch 0007), switches in Tab9 Extras |
 | Rotation, ambient light, compass | ✅ | ADSP sensors through hexagonrpcd + libssc + patched iio-sensor-proxy (from the S9 Ultra port); HexagonFS tree generated from the tablet's own vendor/dsp. Screen rotates in GNOME |
 | Vulkan | ✅ | Turnip Adreno 740, Mesa 25.2.8, Vulkan 1.4. No Vulkan Video (Turnip implements none) |
 | Fingerprint | ✅ | under-display EL721: enrol in Settings → Users (~17 touches; the progress picture does not move yet), then unlock, sudo and polkit accept it. Needs the tablet's own calibration files from Android (see KNOWN-ISSUES #8) |
