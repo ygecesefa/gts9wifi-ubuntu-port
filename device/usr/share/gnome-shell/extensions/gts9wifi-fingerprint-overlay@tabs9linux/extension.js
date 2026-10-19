@@ -25,6 +25,13 @@ const BACKLIGHT = '/sys/class/backlight/ae94000.dsi.0';
 const ACTIVE_LEASE = '/run/gts9wifi-fingerprint/active';
 const LIGHT_REQUEST = '/run/gts9wifi-fingerprint/light';
 const LIGHT_RELEASE = '/run/gts9wifi-fingerprint/last-release';
+// gts9wifi: the black shade that offsets global HBM is kept (almost) transparent.
+// The panel's HBM entry/exit and the shade's frames never line up (30-100 ms,
+// measured on the S9 Ultra), so on the X710 it showed as a lightning-like
+// flash on press and release. Without it the screen is evenly brighter for the
+// ~0.5 s capture instead. The shade actor and its frame gate are kept, so
+// libfprint's light handshake is unchanged; set true to restore compensation.
+const SHADE_COMPENSATION = false;
 const UI_BUS_NAME = 'io.github.ygecesefa.Gts9wifiFingerprintUI';
 const UI_PATH = '/io/github/ygecesefa/Gts9wifiFingerprintUI';
 const INTERFACE = `
@@ -684,7 +691,7 @@ export default class Gts9wifiFingerprintOverlay extends Extension {
         // Read-only state for intermittent post-login input failures. No key
         // contents, finger images, credentials, user names or auth answers.
         return JSON.stringify({
-            version: 23,
+            version: 25,
             nativeGatesUsed: this._nativeGatesUsed ?? 0,
             fallbackGatesUsed: this._fallbackGatesUsed ?? 0,
             lastLightGateMs: this._lastLightGateMs ?? null,
@@ -899,6 +906,10 @@ export default class Gts9wifiFingerprintOverlay extends Extension {
     }
 
     _shadeOpacity() {
+        // 1/255, not 0: the fade treats 0 as a release and the light gate
+        // would never see a ready shade.
+        if (!SHADE_COMPENSATION)
+            return 1;
         const brightness = this._readBacklight('brightness');
         const maximum = this._readBacklight('max_brightness');
         if (!Number.isFinite(brightness) || !Number.isFinite(maximum) ||
