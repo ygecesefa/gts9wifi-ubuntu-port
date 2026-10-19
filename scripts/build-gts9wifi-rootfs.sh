@@ -157,6 +157,12 @@ fi
 
 # Generic firmware under the device payload, as the Fedora port does.  Rootfs
 # trees bootstrapped before linux-firmware was in the package set get it here.
+# Local .debs copied to $rootfs/tmp/gts9wifi-debs, as paths inside the chroot.
+# The glob must be expanded against the rootfs, not the host's /tmp.
+local_debs() {
+	(cd "$rootfs" && for f in tmp/gts9wifi-debs/*.deb; do [ -f "$f" ] && echo "/$f"; done)
+}
+
 apt_in_rootfs() {
 	for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
 	saved=0
@@ -176,13 +182,13 @@ echo "== local packages: sensors (libssc, hexagonrpcd, iio-sensor-proxy), camera
 mkdir -p "$rootfs/tmp/gts9wifi-debs"
 cp "$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb \
 	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb "$rootfs/tmp/gts9wifi-debs/"
-apt_in_rootfs /tmp/gts9wifi-debs/*.deb
+apt_in_rootfs $(local_debs)
 rm -rf "$rootfs/tmp/gts9wifi-debs"
 
 echo "== fingerprint (EL721): libfprint, fprintd, secure-start helpers"
 mkdir -p "$rootfs/tmp/gts9wifi-debs"
 cp "$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$rootfs/tmp/gts9wifi-debs/"
-apt_in_rootfs /tmp/gts9wifi-debs/*.deb fprintd libpam-fprintd
+apt_in_rootfs $(local_debs) fprintd libpam-fprintd
 rm -rf "$rootfs/tmp/gts9wifi-debs"
 # Fingerprint as an alternative to the password (sudo, polkit, unlock).
 # pam_fprintd falls through to the password after a timeout or a mismatch,
@@ -280,7 +286,9 @@ for u in "$ov"/usr/lib/systemd/system/*; do
 done
 cp -a "$ov/etc/systemd/system/." "$rootfs/etc/systemd/system/"
 # This port's own device files (on top of the Fedora overlay).
-cp -a --no-preserve=ownership "$repo/device/." "$rootfs/"
+# --remove-destination: the Fedora overlay masks some units (vendor.mount ->
+# /dev/null) that this port ships for real; a plain copy writes through the link.
+cp -a --remove-destination --no-preserve=ownership "$repo/device/." "$rootfs/"
 # First boot: never write to the Android persist partition.
 sed -i 's/^Options=rw,/Options=ro,/' "$rootfs/usr/lib/systemd/system/mnt-vendor-persist.mount"
 # A read-only ext4 mount still replays a dirty journal, i.e. writes to the
@@ -350,5 +358,5 @@ lsinitramfs "$rootfs/boot/initrd.img-$krel" | grep -cE 'a740_sqe|gmu_gen70200|a7
 	awk '{ if ($1 < 6) { print "GPU firmware missing from initramfs" > "/dev/stderr"; exit 1 } }'
 
 echo "== 6/6 summary"
-du -sh "$rootfs"
+du -shx "$rootfs"
 printf 'kernel=%s\ninitramfs=%s\n' "$krel" "$rootfs/boot/initrd.img-$krel"
