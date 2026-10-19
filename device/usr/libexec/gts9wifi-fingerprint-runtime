@@ -126,7 +126,7 @@ def assemble():
     print(f'{len(manifest)} files in {DEST}')
     for blob in ('calib.dat', 'egoptbds.dat'):
         if not (FIRMWARE / blob).exists():
-            print(f'still missing: firmware/{blob} (import from Android once)')
+            print(f'still missing: firmware/{blob} (to-ubuntu.sh copies it from Android)')
 
 
 def check():

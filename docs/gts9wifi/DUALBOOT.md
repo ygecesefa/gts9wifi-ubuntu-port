@@ -48,6 +48,14 @@ partition has the expected size, that every image matches `SHA256SUMS`, asks
 you to type `UBUNTU`, writes the four images, reads them back to verify, and
 reboots.
 
+Before writing, it also copies the fingerprint sensor's factory calibration
+(`calib.dat`, `egoptbds.dat` from Android's `/data/vendor/biometrics/meta`) to
+`/var/lib/gts9wifi/fingerprint/firmware/` on the microSD's `GTS9W_ROOT`
+(0600 root, sha256-checked), when it is missing there or differs. These files
+are unique to each tablet and exist only in Android's encrypted `/data`, so
+they are never part of the image. If anything goes wrong it prints a
+warning and the switch continues; only the fingerprint reader needs them.
+
 ## Ubuntu → Android
 
 In Ubuntu, open **Android'e Geç** (Switch to Android) from the app grid, or:

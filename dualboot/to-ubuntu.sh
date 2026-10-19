@@ -3,7 +3,8 @@
 #
 # Adapted from the Fedora gts9wifi port's to-fedora.sh.  Writes the four Linux
 # boot images to boot, init_boot, vendor_boot and dtbo, then reboots.  vbmeta
-# is never touched.  Run from a root shell (Magisk su).
+# is never touched.  Run from a root shell (Magisk su).  On the way it copies
+# the fingerprint sensor's calibration to the Ubuntu root on the microSD.
 #
 # Images:  /data/media/0/Ubuntu/images/{boot,init_boot,vendor_boot,dtbo}.img
 #          plus SHA256SUMS produced by build-gts9wifi-bundle.sh
@@ -11,6 +12,53 @@ set -eu
 
 BASE="/data/media/0/Ubuntu/images"
 BB="/dev/block/by-name"
+# Factory calibration of this tablet's fingerprint sensor.  It only exists in
+# Android's encrypted /data, is unique to each unit and is never shipped in the
+# image; Ubuntu's EL721 driver reads it from FP_DEST on the microSD root.
+FP_SRC="/data/vendor/biometrics/meta"
+FP_DEST="var/lib/gts9wifi/fingerprint/firmware"
+FP_MNT="/data/local/tmp/gts9w-root"
+
+# Copy calib.dat and egoptbds.dat to the Ubuntu root on the microSD when they
+# are missing there or differ.  Best effort: any problem is reported and the
+# switch to Ubuntu goes on (only the fingerprint reader needs them).
+copy_fp_calibration() {
+    for f in calib.dat egoptbds.dat; do
+        [ -f "$FP_SRC/$f" ] || { echo "UYARI: $FP_SRC/$f yok; parmak izi kalibrasyonu aktarılmadı"; return 0; }
+    done
+    root=$(blkid 2>/dev/null | grep 'LABEL="GTS9W_ROOT"' | cut -d: -f1 || true)
+    case "$root" in
+        /dev/block/mmcblk1p[0-9]*) ;;
+        *) echo "UYARI: SD kartta GTS9W_ROOT bulunamadı ($root); kalibrasyon aktarılmadı"; return 0 ;;
+    esac
+    if grep -q "^$root " /proc/mounts; then
+        echo "UYARI: $root zaten bağlı; kalibrasyon aktarılmadı"; return 0
+    fi
+    mkdir -p "$FP_MNT"
+    mount -t ext4 -o rw,noatime,nosuid,nodev,noexec "$root" "$FP_MNT" || {
+        echo "UYARI: $root bağlanamadı; kalibrasyon aktarılmadı"; rmdir "$FP_MNT" 2>/dev/null || true; return 0; }
+    [ -d "$FP_MNT/usr/lib/gts9wifi" ] || {
+        echo "UYARI: $root bir gts9wifi Ubuntu kökü değil; kalibrasyon aktarılmadı"
+        umount "$FP_MNT" || true; rmdir "$FP_MNT" 2>/dev/null || true; return 0; }
+    dest="$FP_MNT/$FP_DEST"
+    ok=1
+    for f in calib.dat egoptbds.dat; do
+        want=$(sha256sum "$FP_SRC/$f" | cut -d' ' -f1)
+        if [ -f "$dest/$f" ] && [ "$(sha256sum "$dest/$f" | cut -d' ' -f1)" = "$want" ]; then
+            echo "OK: $f zaten Ubuntu'da"
+            continue
+        fi
+        mkdir -p "$dest" && chmod 700 "$FP_MNT/var/lib/gts9wifi/fingerprint" "$dest" &&
+        cp "$FP_SRC/$f" "$dest/.$f.new" && chown 0:0 "$dest/.$f.new" && chmod 600 "$dest/.$f.new" &&
+        [ "$(sha256sum "$dest/.$f.new" | cut -d' ' -f1)" = "$want" ] && mv "$dest/.$f.new" "$dest/$f" ||
+            { echo "UYARI: $f kopyalanamadı"; rm -f "$dest/.$f.new"; ok=0; continue; }
+        echo "OK: $f Ubuntu'ya kopyalandı (sha256 doğru)"
+    done
+    sync
+    umount "$FP_MNT" && rmdir "$FP_MNT" 2>/dev/null || true
+    [ "$ok" = 1 ] || echo "UYARI: parmak izi kalibrasyonu eksik kaldı"
+    return 0
+}
 
 [ "$(id -u)" = 0 ] || { echo "HATA: root gerekli (su)"; exit 1; }
 [ "$(getprop ro.product.device)" = "gts9wifi" ] || { echo "HATA: Cihaz gts9wifi değil!"; exit 1; }
@@ -46,6 +94,8 @@ echo "Android'e dönüş: Ubuntu'da 'Android'e Geç' ya da recovery'den yedek ge
 echo "Devam etmek için UBUNTU yaz:"
 read answer
 [ "$answer" = "UBUNTU" ] || { echo "İptal edildi."; exit 0; }
+
+copy_fp_calibration
 
 for name in boot init_boot vendor_boot dtbo; do
     echo "Yazılıyor: $name"
