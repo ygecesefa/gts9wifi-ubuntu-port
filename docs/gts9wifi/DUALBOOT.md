@@ -48,13 +48,27 @@ partition has the expected size, that every image matches `SHA256SUMS`, asks
 you to type `UBUNTU`, writes the four images, reads them back to verify, and
 reboots.
 
-Before writing, it also copies the fingerprint sensor's factory calibration
+Before writing, it also hands the fingerprint sensor's factory calibration
 (`calib.dat`, `egoptbds.dat` from Android's `/data/vendor/biometrics/meta`) to
-`/var/lib/gts9wifi/fingerprint/firmware/` on the microSD's `GTS9W_ROOT`
-(0600 root, sha256-checked), when it is missing there or differs. These files
-are unique to each tablet and exist only in Android's encrypted `/data`, so
-they are never part of the image. If anything goes wrong it prints a
-warning and the switch continues; only the fingerprint reader needs them.
+Ubuntu. On cards with the FAT partition `GTS9W_BACK` (v0.2.0-pre3 layout) it
+goes to `GTS9W_BACK/fingerprint/` with a `SHA256SUMS`, and Ubuntu's
+`gts9wifi-import-backup` installs it at the next boot (0600 root). On older
+cards it is written straight to `/var/lib/gts9wifi/fingerprint/firmware/` on
+`GTS9W_ROOT`. These files are unique to each tablet and exist only in
+Android's encrypted `/data`, so they are never part of the image. Note that
+Android mounts `GTS9W_BACK` as SD-card storage, so apps with storage access
+can read the calibration (it holds no fingerprints). If anything goes wrong
+the script prints a warning and the switch continues; only the fingerprint
+reader needs them.
+
+## Recovery installer
+
+`ubuntu-gts9wifi-<version>-installer.zip` installs everything from recovery
+(LineageOS recovery or TWRP, best via `adb sideload`): it backs up this
+tablet's Android boot images into `GTS9W_BACK/android-restore.zip`, erases and
+writes the microSD after a Volume Up / Volume Down question, and writes the
+Ubuntu boot images last. Flash `android-restore.zip` in recovery to go back to
+Android. Details: [installer/README.md](../../installer/README.md).
 
 ## Ubuntu → Android
 

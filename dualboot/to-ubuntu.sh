@@ -19,13 +19,44 @@ FP_SRC="/data/vendor/biometrics/meta"
 FP_DEST="var/lib/gts9wifi/fingerprint/firmware"
 FP_MNT="/data/local/tmp/gts9w-root"
 
-# Copy calib.dat and egoptbds.dat to the Ubuntu root on the microSD when they
-# are missing there or differ.  Best effort: any problem is reported and the
-# switch to Ubuntu goes on (only the fingerprint reader needs them).
+# Hand calib.dat and egoptbds.dat to Ubuntu.  Cards with the FAT partition
+# GTS9W_BACK (v0.2.0-pre3 layout): into GTS9W_BACK/fingerprint/, which Ubuntu's
+# gts9wifi-import-backup installs at boot.  Older cards: straight into the
+# Ubuntu root, when missing there or different.  Best effort: any problem is
+# reported and the switch to Ubuntu goes on (only the fingerprint needs them).
+copy_fp_to_back() {
+    back=$(blkid 2>/dev/null | grep 'LABEL="GTS9W_BACK"' | cut -d: -f1 || true)
+    case "$back" in
+        /dev/block/mmcblk1p[0-9]*) ;;
+        *) return 1 ;;
+    esac
+    # Android's vold usually has it mounted already (it is the card's FAT).
+    dir=$(grep "^$back " /proc/mounts | cut -d' ' -f2 | head -1 || true)
+    mounted=0
+    if [ -z "$dir" ]; then
+        mkdir -p "$FP_MNT"
+        mount -t vfat "$back" "$FP_MNT" || { echo "UYARI: $back bağlanamadı"; return 0; }
+        dir=$FP_MNT; mounted=1
+    fi
+    mkdir -p "$dir/fingerprint"
+    ok=1
+    for f in calib.dat egoptbds.dat; do
+        cp "$FP_SRC/$f" "$dir/fingerprint/.$f.new" && mv "$dir/fingerprint/.$f.new" "$dir/fingerprint/$f" || ok=0
+    done
+    (cd "$dir/fingerprint" && sha256sum calib.dat egoptbds.dat > SHA256SUMS) || ok=0
+    (cd "$FP_SRC" && sha256sum calib.dat egoptbds.dat) | cmp -s - "$dir/fingerprint/SHA256SUMS" || ok=0
+    sync
+    [ $mounted = 1 ] && { umount "$FP_MNT" || true; rmdir "$FP_MNT" 2>/dev/null || true; }
+    if [ $ok = 1 ]; then echo "OK: parmak izi kalibrasyonu GTS9W_BACK/fingerprint'e yazıldı (sha256 doğru)"
+    else echo "UYARI: kalibrasyon GTS9W_BACK'e yazılamadı"; fi
+    return 0
+}
+
 copy_fp_calibration() {
     for f in calib.dat egoptbds.dat; do
         [ -f "$FP_SRC/$f" ] || { echo "UYARI: $FP_SRC/$f yok; parmak izi kalibrasyonu aktarılmadı"; return 0; }
     done
+    copy_fp_to_back && return 0
     root=$(blkid 2>/dev/null | grep 'LABEL="GTS9W_ROOT"' | cut -d: -f1 || true)
     case "$root" in
         /dev/block/mmcblk1p[0-9]*) ;;
