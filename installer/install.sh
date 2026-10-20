@@ -116,8 +116,19 @@ card_has_ubuntu() {
 }
 # Copy one file onto GTS9W_BACK and check it there.
 put() {
-	cp "$1" "$2.new" && sync && [ "$(sha "$2.new")" = "$(sha "$1")" ] && mv "$2.new" "$2" ||
-		fail "Could not write $(basename "$2") to the SD card"
+	rm -f "$2.new"
+	cp "$1" "$2.new" && sync && [ "$(sha "$2.new")" = "$(sha "$1")" ] && mv "$2.new" "$2" || {
+		rm -f "$2.new"; fail "Could not write $(basename "$2") to the SD card"; }
+}
+# Older cards (512 MiB GTS9W_BACK) also kept the Android images unpacked in
+# android/.  Remove only those files: on FAT that folder is the same as
+# Android's own "Android/" (data, media of apps on the card).
+drop_legacy() {
+	for f in boot.img init_boot.img vendor_boot.img dtbo.img SHA256SUMS info.txt; do
+		rm -f $W/back/android/$f
+	done
+	rmdir $W/back/android 2>/dev/null
+	return 0
 }
 # The calibration lives only in Android's /data/vendor (encrypted for a
 # recovery); Ubuntu's gts9wifi-import-backup installs it from the card.
@@ -303,12 +314,21 @@ fi
 
 if [ $keep = 1 ]; then
 	mount_back
+	drop_legacy
 	[ $backup != none ] && put $W/android-restore.zip $W/back/android-restore.zip
 	copy_fingerprint
+	no_boot_zip=0
+	[ -f $W/back/ubuntu-boot.zip ] || no_boot_zip=1
 	umount $W/back
 	ui ""
 	ui "=============================================="
 	ui " DONE. Ubuntu on the SD card was kept."
+	if [ $no_boot_zip = 1 ]; then
+		ui " WARNING: this card has no ubuntu-boot.zip"
+		ui " (older install), so the module cannot switch"
+		ui " to Ubuntu. Install again and answer NO to"
+		ui " the first question to rebuild the card."
+	fi
 	ui " Switch to Ubuntu with the Magisk module"
 	ui " (action button or WebUI), after a reboot."
 	ui "=============================================="

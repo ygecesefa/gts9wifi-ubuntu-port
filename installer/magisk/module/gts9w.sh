@@ -106,13 +106,18 @@ backup() {
 		[ "$(sha $W/check.img)" = "$(want $n.img $W/set/SHA256SUMS)" ] || die "new zip did not verify ($n)"
 	done
 	rm -f $W/check.img
+	# Older cards also kept the images unpacked in android/; only those files
+	# go (on FAT that folder is Android's own "Android/" for apps' data).
+	for f in boot.img init_boot.img vendor_boot.img dtbo.img SHA256SUMS info.txt; do
+		rm -f $BACK/android/$f
+	done
+	rmdir $BACK/android 2>/dev/null
+	rm -f $BACK/android-restore.zip.new
 	cp $W/set/android-restore.zip $BACK/android-restore.zip.new && sync &&
 	[ "$(sha $BACK/android-restore.zip.new)" = "$(sha $W/set/android-restore.zip)" ] &&
 	mv $BACK/android-restore.zip.new $BACK/android-restore.zip ||
 		{ rm -f $BACK/android-restore.zip.new; die "could not write android-restore.zip to the card"; }
 	sync
-	# Older layouts kept the images unpacked as well; that copy is now stale.
-	rm -rf $BACK/android
 	echo "OK: android-restore.zip updated ($(getprop ro.build.fingerprint))"
 	rm -rf $W/set $W/old.sums
 	close_back
