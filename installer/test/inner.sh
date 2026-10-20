@@ -26,11 +26,11 @@ mkdir -p $S/bin
 printf '#!/bin/sh\ncase "$1" in ro.product.device|ro.build.product) echo gts9wifi;; ro.build.fingerprint) echo test/fake;; esac\n' > $S/bin/getprop
 chmod +x $S/bin/getprop
 : > $S/outfd.log
-# Answer each "Ses Ac" question in turn.
+# Answer each "Volume Up" question in turn.
 (
 	asked=0
 	for a in $(echo $answers | sed 's/./& /g'); do
-		while [ "$(grep -c 'Ses Ac' $S/outfd.log)" -le $asked ]; do sleep 0.3; done
+		while [ "$(grep -c 'Volume Up' $S/outfd.log)" -le $asked ]; do sleep 0.3; done
 		asked=$((asked + 1)); sleep 1.5
 		code=115; [ $a = n ] && code=114
 		python3 -c "import struct,sys; sys.stdout.buffer.write(struct.pack('qqHHi',0,0,1,$code,1)+struct.pack('qqHHi',0,0,1,$code,0))" > /dev/input/event0
