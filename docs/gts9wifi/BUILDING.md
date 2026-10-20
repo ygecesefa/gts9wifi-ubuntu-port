@@ -131,8 +131,8 @@ overlayfs, netfilter), builds, and refuses to finish if any X710 driver is
 missing from the result.
 
 **Rootfs.** `mmdebstrap` of noble with the S9 Ultra port's GNOME package set
-(Turkish locale and keyboard by default, `GTS9WIFI_LOCALE`/`GTS9WIFI_KEYMAP`
-to change), then: kernel modules, device firmware, an initramfs-tools hook
+(English, US keyboard and UTC by default; `GTS9WIFI_LOCALE`,
+`GTS9WIFI_KEYMAP` and `GTS9WIFI_TZ` change them), then: kernel modules, device firmware, an initramfs-tools hook
 that puts the GPU firmware into the initramfs, the Fedora port's X710 services
 (USB network, panel cold-boot recovery, rootfs growth, Wi-Fi recovery, DSP and
 firmware mounts, ALSA UCM), the Ubuntu → Android switch, and a test user.

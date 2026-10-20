@@ -14,7 +14,7 @@
 #   3. ask: the microSD will be erased (Volume Up = yes, Volume Down = no)
 #   4. write the Ubuntu microSD image, read it back
 #   5. put android-restore.zip and the unpacked images on the card's FAT
-#      partition GTS9W_BACK; Ubuntu itself takes them into its "Switch to
+#      partition GTS9W_BACK, next to ubuntu-boot.zip (already in the image); Ubuntu itself takes them into its "Switch to
 #      Android" set at boot (gts9wifi-import-backup).  Recovery never writes
 #      Ubuntu's root filesystem.
 #   6. only now write the four Ubuntu boot images, read them back
@@ -34,8 +34,8 @@ P=gts9wifi
 ui() { printf 'ui_print %s\nui_print\n' "$*" >> /proc/self/fd/$OUTFD; }
 fail() {
 	ui ""
-	ui "HATA: $*"
-	ui "Acilis bolumleri degistirilmedi; tablet onceki sistemiyle acilir."
+	ui "ERROR: $*"
+	ui "Boot partitions were not changed; the tablet boots as before."
 	cleanup
 	exit 1
 }
@@ -58,8 +58,8 @@ size_of() {
 ask() {
 	ui ""
 	for line in "$@"; do ui "$line"; done
-	ui "  Ses Ac  = EVET"
-	ui "  Ses Kis = HAYIR   (60 sn cevap yoksa: HAYIR)"
+	ui "  Volume Up   = YES"
+	ui "  Volume Down = NO   (no answer in 60 s: NO)"
 	$TOOL keys 60
 	[ $? = 0 ]
 }
@@ -68,43 +68,46 @@ rm -rf $W
 mkdir -p $W/pay $W/android
 ui "=============================================="
 ui " Ubuntu 24.04 - Galaxy Tab S9 Wi-Fi (SM-X710)"
-ui " microSD kurulumu"
+ui " microSD installer"
 ui "=============================================="
 
 # ---- 1. checks ----------------------------------------------------------
 dev=$(getprop ro.product.device)
 case "$dev $(getprop ro.build.product) $(getprop ro.boot.hardware.sku 2>/dev/null)" in
 	*gts9wifi*) ;;
-	*) fail "Bu zip yalnizca SM-X710 (gts9wifi) icin (cihaz: $dev)" ;;
+	*) fail "This zip is only for the SM-X710 (gts9wifi) (device: $dev)" ;;
 esac
 
-[ -b $SD ] || fail "microSD kart bulunamadi ($SD)"
-[ "$(cat /sys/block/mmcblk1/device/type 2>/dev/null)" = SD ] || fail "$SD bir SD kart degil"
+[ -b $SD ] || fail "No microSD card found ($SD)"
+[ "$(cat /sys/block/mmcblk1/device/type 2>/dev/null)" = SD ] || fail "$SD is not an SD card"
 for name in boot init_boot vendor_boot dtbo; do
 	part=$BB/$name
-	[ -e $part ] || fail "Bolum yok: $part"
+	[ -e $part ] || fail "Missing partition: $part"
 	case "$(readlink -f $part)" in
 		/dev/block/sd[a-f][0-9]*) ;;
-		*) fail "$part beklenmeyen hedef: $(readlink -f $part)" ;;
+		*) fail "$part points to an unexpected device: $(readlink -f $part)" ;;
 	esac
-	[ "$(blockdev --getsize64 $part)" = "$(size_of $name)" ] || fail "$name bolum boyutu beklenmeyen"
+	[ "$(blockdev --getsize64 $part)" = "$(size_of $name)" ] || fail "Unexpected size of the $name partition"
 done
 
-ui "Paket /tmp'ye aliniyor ve dogrulaniyor..."
+ui "Copying the package to /tmp and verifying it..."
 free_kb=$(df -k /tmp | tail -1 | tr -s ' ' | cut -d' ' -f4)
-[ "${free_kb:-0}" -gt 2500000 ] || fail "/tmp'de yer yok (${free_kb} KB)"
+[ "${free_kb:-0}" -gt 2500000 ] || fail "Not enough space in /tmp (${free_kb} KB)"
 for f in SHA256SUMS sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img \
 	restore.sh version.txt; do
-	$TOOL extract "$ZIPFILE" $P/$f $W/pay/$f || fail "Zip'ten cikarilamadi: $f"
+	$TOOL extract "$ZIPFILE" $P/$f $W/pay/$f || fail "Could not extract from the zip: $f"
 done
 for f in sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img restore.sh; do
-	[ "$(sha $W/pay/$f)" = "$(want $f $W/pay/SHA256SUMS)" ] || fail "sha256 uyusmuyor: $f"
+	[ "$(sha $W/pay/$f)" = "$(want $f $W/pay/SHA256SUMS)" ] || fail "sha256 mismatch: $f"
 done
 raw_size=$(grep '^raw_size ' $W/pay/SHA256SUMS | cut -d' ' -f2)
+raw_sectors=$(grep '^raw_sectors ' $W/pay/SHA256SUMS | cut -d' ' -f2)
 raw_sha=$(want sd.img $W/pay/SHA256SUMS)
-card=$(blockdev --getsize64 $SD)
-[ "$card" -ge "$raw_size" ] || fail "SD kart kucuk: $card bayt, en az $raw_size gerekli"
-ui "Paket OK: $(cat $W/pay/version.txt)"
+# Sizes are compared in 512-byte sectors: Android's mksh does 32-bit
+# arithmetic, so byte counts above 2 GiB overflow in [ -ge ] and $(( )).
+card=$(blockdev --getsz $SD)
+[ "$card" -ge "$raw_sectors" ] || fail "SD card too small: $card sectors, at least $raw_sectors needed"
+ui "Package OK: $(cat $W/pay/version.txt)"
 
 # ---- 2. Android backup ----------------------------------------------------
 is_ubuntu_set() {
@@ -132,7 +135,7 @@ rescue_backup() {
 						cp $d/$name.img $W/android/
 					done
 					umount $W/old
-					ui "Eski Android yedegi bulundu: $p"
+					ui "Found an earlier Android backup: $p"
 					return 0
 				fi
 			done
@@ -143,17 +146,17 @@ rescue_backup() {
 }
 
 ui ""
-ui "Android acilis imajlari yedekleniyor..."
+ui "Backing up the Android boot images..."
 backup=none
 if is_ubuntu_set; then
-	ui "Bolumlerde zaten Ubuntu acilis seti var; Android yedegi kartta araniyor."
+	ui "The partitions already hold an Ubuntu boot set; looking for an Android backup on the card."
 	if rescue_backup; then
 		backup=card
-	elif ask "Android yedegi BULUNAMADI. Devam edilirse Android'e donmek" \
-		"icin kendi yedeginiz ya da PC'den fastboot gerekir." "Yine de devam edilsin mi?"; then
+	elif ask "NO Android backup found. If you continue, going back to" \
+		"Android needs your own backup or fastboot from a PC." "Continue anyway?"; then
 		backup=none
 	else
-		fail "Iptal edildi (Android yedegi yok)"
+		fail "Cancelled (no Android backup)"
 	fi
 else
 	for name in boot init_boot vendor_boot dtbo; do
@@ -185,76 +188,76 @@ if [ $backup != none ]; then
 		android/vendor_boot.img=$W/android/vendor_boot.img \
 		android/dtbo.img=$W/android/dtbo.img \
 		android/SHA256SUMS=$W/android/SHA256SUMS \
-		android/info.txt=$W/android/info.txt || fail "android-restore.zip olusturulamadi"
+		android/info.txt=$W/android/info.txt || fail "Could not create android-restore.zip"
 	# Read the images back out of the new zip before anything is erased.
 	for name in boot init_boot vendor_boot dtbo; do
 		$TOOL extract $W/android-restore.zip android/$name.img $W/check.img &&
 		[ "$(sha $W/check.img)" = "$(want $name.img $W/android/SHA256SUMS)" ] ||
-			fail "android-restore.zip dogrulanamadi ($name)"
+			fail "android-restore.zip did not verify ($name)"
 	done
 	rm -f $W/check.img
-	ui "android-restore.zip hazir ve dogrulandi."
+	ui "android-restore.zip created and verified."
 fi
 
 # ---- 3. confirm ------------------------------------------------------------
-ask "DIKKAT: microSD karttaki HER SEY SILINECEK" \
-	"($((card / 1000000000)) GB) ve Ubuntu kurulacak." \
-	"Android ve dahili depolama degismez." \
-	"Devam edilsin mi?" || fail "Iptal edildi; hicbir sey yazilmadi"
+ask "WARNING: EVERYTHING on the microSD card" \
+	"($((card / 1953125)) GB) will be ERASED and Ubuntu installed." \
+	"Android and the internal storage are not changed." \
+	"Continue?" || fail "Cancelled; nothing was written"
 
 # ---- 4. microSD ------------------------------------------------------------
 for m in $(grep "^$SD" /proc/mounts | cut -d' ' -f2); do
-	umount "$m" || fail "SD kart ayrilamadi: $m"
+	umount "$m" || fail "Could not unmount the SD card: $m"
 done
 ui ""
-ui "Ubuntu SD karta yaziliyor (birkac dakika)..."
+ui "Writing Ubuntu to the SD card (a few minutes)..."
 { $TOOL unzstd $W/pay/sd.img.zst $SD; echo "rc $?"; } | while read pct rc; do
 	if [ "$pct" = rc ]; then echo $rc > $W/unzstd.rc; else ui "  %$pct"; fi
 done
-[ "$(cat $W/unzstd.rc 2>/dev/null)" = 0 ] || fail "SD karta yazilamadi; acilis bolumleri DEGISMEDI"
+[ "$(cat $W/unzstd.rc 2>/dev/null)" = 0 ] || fail "Writing the SD card failed; boot partitions NOT changed"
 rm -f $W/pay/sd.img.zst
 sync
-ui "Okunarak dogrulaniyor..."
+ui "Reading back to verify..."
 [ "$(head -c $raw_size $SD | sha256sum | cut -d' ' -f1)" = "$raw_sha" ] ||
-	fail "SD kart yazma dogrulamasi basarisiz; acilis bolumleri DEGISMEDI"
+	fail "SD card read-back failed; boot partitions NOT changed"
 blockdev --rereadpt $SD
 i=0
 while [ ! -b ${SD}p3 ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
-[ -b ${SD}p1 ] && [ -b ${SD}p3 ] || fail "SD bolumleri gorunmedi; acilis bolumleri DEGISMEDI"
-ui "SD kart OK."
+[ -b ${SD}p1 ] && [ -b ${SD}p3 ] || fail "SD partitions did not appear; boot partitions NOT changed"
+ui "SD card OK."
 
 # ---- 5. backups onto the card ----------------------------------------------
 if [ $backup != none ]; then
 	mkdir -p $W/back
-	mount -t vfat ${SD}p1 $W/back || fail "GTS9W_BACK baglanamadi"
+	mount -t vfat ${SD}p1 $W/back || fail "Could not mount GTS9W_BACK"
 	mkdir -p $W/back/android
 	cp $W/android-restore.zip $W/back/ &&
 	cp $W/android/*.img $W/android/SHA256SUMS $W/android/info.txt $W/back/android/ ||
-		fail "Yedek SD karta yazilamadi"
+		fail "Could not write the backup to the SD card"
 	sync
 	[ "$(sha $W/back/android-restore.zip)" = "$(sha $W/android-restore.zip)" ] ||
-		fail "SD karttaki android-restore.zip dogrulanamadi"
+		fail "android-restore.zip on the SD card did not verify"
 	for name in boot init_boot vendor_boot dtbo; do
 		[ "$(sha $W/back/android/$name.img)" = "$(want $name.img $W/android/SHA256SUMS)" ] ||
-			fail "SD karttaki android/$name.img dogrulanamadi"
+			fail "android/$name.img on the SD card did not verify"
 	done
 	umount $W/back
-	ui "Android yedegi SD karta yazildi (GTS9W_BACK)."
-	ui "Ubuntu ilk acilista onu 'Android'e Gec' icin alir."
+	ui "Android backup written to the SD card (GTS9W_BACK)."
+	ui "Ubuntu takes it for 'Switch to Android' at first boot."
 fi
 
 # ---- 6. Ubuntu boot images ---------------------------------------------------
 ui ""
-ui "Ubuntu acilis imajlari yaziliyor..."
+ui "Writing the Ubuntu boot images..."
 for name in boot init_boot vendor_boot dtbo; do
-	dd if=$W/pay/$name.img of=$BB/$name bs=4194304 2>/dev/null || fail "$name yazilamadi"
+	dd if=$W/pay/$name.img of=$BB/$name bs=4194304 2>/dev/null || fail "Could not write $name"
 done
 sync
 for name in boot init_boot vendor_boot dtbo; do
 	[ "$(head -c $(size_of $name) $BB/$name | sha256sum | cut -d' ' -f1)" = \
 		"$(want $name.img $W/pay/SHA256SUMS)" ] || {
-		ui "HATA: $name yazma dogrulamasi basarisiz."
-		ui "Yeniden baslatmadan once GTS9W_BACK/android-restore.zip'i flashlayin."
+		ui "ERROR: $name did not verify after writing."
+		ui "Flash GTS9W_BACK/android-restore.zip before rebooting."
 		cleanup
 		exit 1
 	}
@@ -262,20 +265,21 @@ done
 
 ui ""
 ui "=============================================="
-ui " KURULUM TAMAM. Yeniden baslatin: Ubuntu acilir."
-ui " Kullanici: ubuntu   Parola: ubuntu"
+ui " DONE. Reboot: Ubuntu will start."
+ui " User: ubuntu   Password: ubuntu"
 ui ""
 if [ $backup != none ]; then
-	ui " Android yedegi SD kartta:"
-	ui "   GTS9W_BACK/android-restore.zip"
-	ui " Android'e donmek icin recovery'de bu zip'i"
-	ui " flashlayin (ya da Ubuntu'da 'Android'e Gec')."
+	ui " Two switch zips are on the SD card (GTS9W_BACK):"
+	ui "   android-restore.zip  -> back to Android"
+	ui "   ubuntu-boot.zip      -> back to Ubuntu"
+	ui " Flash either one in recovery; no root needed."
+	ui " (In Ubuntu: 'Switch to Android' in the dock.)"
 else
-	ui " UYARI: Android yedegi alinmadi."
+	ui " WARNING: no Android backup was taken."
 fi
 ui ""
-ui " Parmak izi icin bir kez Android'den to-ubuntu.sh"
-ui " ile gecin (kalibrasyon yalnizca Android'de)."
+ui " For the fingerprint reader, switch once from"
+ui " Android with to-ubuntu.sh (calibration is in Android)."
 ui "=============================================="
 cleanup
 exit 0

@@ -17,36 +17,36 @@ declare -A EXPECTED=(
 )
 
 echo "Ubuntu -> Android (gts9wifi)"
-[[ $EUID -eq 0 ]] || { echo "Hata: root yetkisi gerekli."; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "Error: root needed."; exit 1; }
 [[ -f "$BASE/SHA256SUMS" ]] || {
-    echo "Bu tabletin Android yedeği yok ($BASE boş)."
-    echo "Kurulum zip'i yedeği SD karttaki GTS9W_BACK bölümüne koyar; Ubuntu açılışta onu alır."
-    echo "Android'e dönüş: recovery'den GTS9W_BACK/android-restore.zip ya da PC'den fastboot."
+    echo "No Android backup of this tablet ($BASE is empty)."
+    echo "The installer zip puts it on the SD card's GTS9W_BACK partition; Ubuntu takes it at boot."
+    echo "Back to Android: flash GTS9W_BACK/android-restore.zip in recovery, or fastboot from a PC."
     exit 1; }
 
 for name in boot init_boot vendor_boot dtbo; do
     img="$BASE/$name.img"
     dev="$PARTS/$name"
-    [[ -f "$img" ]] || { echo "Eksik imaj: $img"; exit 1; }
-    [[ -b "$dev" ]] || { echo "Bölüm bulunamadı: $dev"; exit 1; }
+    [[ -f "$img" ]] || { echo "Missing image: $img"; exit 1; }
+    [[ -b "$dev" ]] || { echo "Partition not found: $dev"; exit 1; }
     [[ "$(readlink -f "$dev")" == /dev/sd[a-f][0-9]* ]] || {
-        echo "Beklenmeyen hedef: $dev -> $(readlink -f "$dev")"; exit 1; }
-    [[ "$(stat -c %s "$img")" -eq "${EXPECTED[$name]}" ]] || { echo "İmaj boyutu hatalı: $img"; exit 1; }
-    [[ "$(blockdev --getsize64 "$dev")" -eq "${EXPECTED[$name]}" ]] || { echo "Bölüm boyutu hatalı: $dev"; exit 1; }
+        echo "Unexpected target: $dev -> $(readlink -f "$dev")"; exit 1; }
+    [[ "$(stat -c %s "$img")" -eq "${EXPECTED[$name]}" ]] || { echo "Wrong image size: $img"; exit 1; }
+    [[ "$(blockdev --getsize64 "$dev")" -eq "${EXPECTED[$name]}" ]] || { echo "Wrong partition size: $dev"; exit 1; }
     (cd "$BASE" && grep " $name.img\$" SHA256SUMS | sha256sum -c --quiet -) || {
-        echo "sha256 uyuşmuyor: $img"; exit 1; }
-    echo "Kontrol OK: $name"
+        echo "sha256 mismatch: $img"; exit 1; }
+    echo "Checked: $name"
 done
 
 for name in boot init_boot vendor_boot dtbo; do
-    echo "Yazılıyor: $name"
+    echo "Writing: $name"
     dd if="$BASE/$name.img" of="$PARTS/$name" bs=4M iflag=fullblock conv=fsync status=progress
 done
 sync
 for name in boot init_boot vendor_boot dtbo; do
     want=$(grep " $name.img\$" "$BASE/SHA256SUMS" | cut -d' ' -f1)
     have=$(head -c "${EXPECTED[$name]}" "$PARTS/$name" | sha256sum | cut -d' ' -f1)
-    [[ "$want" == "$have" ]] || { echo "Yazma doğrulaması başarısız: $name — yeniden başlatılmıyor"; exit 1; }
+    [[ "$want" == "$have" ]] || { echo "$name did not verify after writing - not rebooting"; exit 1; }
 done
-echo "Android imajları doğrulandı; yeniden başlatılıyor."
+echo "Android images verified; rebooting."
 systemctl reboot

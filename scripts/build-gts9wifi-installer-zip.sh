@@ -11,8 +11,9 @@
 #   gts9wifi/restore.sh                         goes into android-restore.zip
 #   gts9wifi/{sd.img.zst,*.img,SHA256SUMS,version.txt}
 #
-# Inputs: the SD image (build-gts9wifi-sd-image.sh) and the boot set
-# (build-gts9wifi-bundle.sh).  Every payload entry is stored, not deflated:
+# Inputs: the SD image (build-gts9wifi-sd-image.sh), the boot set
+# (build-gts9wifi-bundle.sh) and the loader built with ubuntu-boot.zip
+# (build-gts9wifi-ubuntu-boot-zip.sh, run before the SD image).  Every payload entry is stored, not deflated:
 # the image is already zstd, and gts9w-tool only reads stored entries.
 set -euo pipefail
 
@@ -28,15 +29,25 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$out" "$work/p"
 
-echo "== gts9w-tool (static arm64)"
-gcc -O2 -Wall -Wextra -static -s -o "$work/gts9w-tool" "$repo/installer/gts9w-tool.c" -lz -lzstd
-file "$work/gts9w-tool" | grep -q 'statically linked' || { echo 'gts9w-tool is not static' >&2; exit 1; }
+echo "== loader (from build-gts9wifi-ubuntu-boot-zip.sh)"
+for f in "$out/gts9w-tool" "$out/update-binary" "$out/ubuntu-boot.zip"; do
+	test -f "$f" || { echo "missing: $f (run build-gts9wifi-ubuntu-boot-zip.sh)" >&2; exit 1; }
+done
+# The loader must carry the current sources, not a stale build.
+head -c "$(stat -c %s "$repo/installer/update-binary.sh")" "$out/update-binary" |
+	cmp -s - "$repo/installer/update-binary.sh" || { echo "stale $out/update-binary" >&2; exit 1; }
 
 echo "== payload"
 for f in "$sd" "$sd.zst" "$bundle"/{boot,init_boot,vendor_boot,dtbo}.img; do
 	test -f "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 (cd "$bundle" && sha256sum -c --quiet SHA256SUMS)
+# ubuntu-boot.zip (already inside the SD image) must hold this same boot set.
+for n in boot init_boot vendor_boot dtbo; do
+	[ "$(unzip -p "$out/ubuntu-boot.zip" ubuntu/$n.img | sha256sum | cut -d' ' -f1)" = \
+		"$(sha256sum < "$bundle/$n.img" | cut -d' ' -f1)" ] || {
+		echo "ubuntu-boot.zip $n.img differs from $bundle; rebuild it and the SD image" >&2; exit 1; }
+done
 raw_sha=$(grep " $sd\$" "$sd.SHA256SUMS" | cut -d' ' -f1)
 [ -n "$raw_sha" ] || { echo "no sha for $sd in $sd.SHA256SUMS" >&2; exit 1; }
 # The raw sha is trusted from the image build; check the .zst still matches it.
@@ -52,16 +63,17 @@ printf '%s (port %s)\n' "$version" "$(git -C "$repo" rev-parse --short HEAD)" > 
 	> "$work/p/SHA256SUMS"
 echo "$(sha256sum < "$sd.zst" | cut -d' ' -f1)  sd.img.zst" >> "$work/p/SHA256SUMS"
 echo "$raw_sha  sd.img" >> "$work/p/SHA256SUMS"
-echo "raw_size $(stat -c %s "$sd")" >> "$work/p/SHA256SUMS"
+raw=$(stat -c %s "$sd")
+[ $((raw % 512)) = 0 ] || { echo "SD image size $raw is not a multiple of 512" >&2; exit 1; }
+echo "raw_size $raw" >> "$work/p/SHA256SUMS"
+echo "raw_sectors $((raw / 512))" >> "$work/p/SHA256SUMS"
 
-cat "$repo/installer/update-binary.sh" "$work/gts9w-tool" > "$work/update-binary"
-printf '%016d' "$(stat -c %s "$repo/installer/update-binary.sh")" >> "$work/update-binary"
 printf '# gts9wifi Ubuntu installer: see gts9wifi/install.sh (run by update-binary)\n' > "$work/updater-script"
 
 echo "== zip"
 rm -f "$zip"
-"$work/gts9w-tool" zip -0 "$zip" \
-	META-INF/com/google/android/update-binary="$work/update-binary" \
+"$out/gts9w-tool" zip -0 "$zip" \
+	META-INF/com/google/android/update-binary="$out/update-binary" \
 	META-INF/com/google/android/updater-script="$work/updater-script" \
 	gts9wifi/SHA256SUMS="$work/p/SHA256SUMS" \
 	gts9wifi/version.txt="$work/p/version.txt" \

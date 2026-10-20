@@ -33,9 +33,11 @@ rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 suite=noble
 mirror=${UBUNTU_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
 hostname=gts9wifi
-locale=${GTS9WIFI_LOCALE:-tr_TR.UTF-8}
-keymap=${GTS9WIFI_KEYMAP:-tr}
-timezone=${GTS9WIFI_TZ:-Europe/Istanbul}
+# Release images are English (US keyboard, UTC); a personal build can set
+# e.g. GTS9WIFI_LOCALE=tr_TR.UTF-8 GTS9WIFI_KEYMAP=tr GTS9WIFI_TZ=Europe/Istanbul.
+locale=${GTS9WIFI_LOCALE:-en_US.UTF-8}
+keymap=${GTS9WIFI_KEYMAP:-us}
+timezone=${GTS9WIFI_TZ:-Etc/UTC}
 user=${GTS9WIFI_USER:-ubuntu}
 password=${GTS9WIFI_PW:?set GTS9WIFI_PW to the test user password}
 
@@ -99,7 +101,7 @@ t="\$1"
 echo '$hostname' > "\$t/etc/hostname"
 printf '127.0.0.1\tlocalhost\n127.0.1.1\t$hostname\n::1\t\tlocalhost ip6-localhost ip6-loopback\n' > "\$t/etc/hosts"
 
-printf '%s UTF-8\nen_US.UTF-8 UTF-8\n' '$locale' > "\$t/etc/locale.gen"
+printf '%s UTF-8\nen_US.UTF-8 UTF-8\n' '$locale' | sort -u > "\$t/etc/locale.gen"
 chroot "\$t" locale-gen >/dev/null
 echo 'LANG=$locale' > "\$t/etc/default/locale"
 ln -sf "/usr/share/zoneinfo/$timezone" "\$t/etc/localtime"
@@ -143,6 +145,8 @@ chmod +x "$hooks/configure.sh"
 echo "== 1/6 mmdebstrap $suite -> $rootfs"
 if [ "${SKIP_BOOTSTRAP:-0}" = 1 ] && [ -x "$rootfs/usr/bin/gnome-shell" ]; then
 	echo 'SKIP_BOOTSTRAP=1: reusing the existing package installation'
+	# The hook only writes config files: rerun it so locale/keyboard/etc. follow.
+	"$hooks/configure.sh" "$rootfs"
 else
 rm -rf -- "$rootfs"
 mmdebstrap --mode=root --variant=apt --arch=arm64 \

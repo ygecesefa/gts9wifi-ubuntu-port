@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Android'e Geç
-Name[en]=Switch to Android
-Comment=Android önyükleme imajlarını geri yükle ve Android'e yeniden başlat
-Comment[en]=Restore the Android boot images and reboot into Android
+Name=Switch to Android
+Name[tr]=Android'e Geç
+Comment=Restore the Android boot images and reboot into Android
+Comment[tr]=Android önyükleme imajlarını geri yükle ve Android'e yeniden başlat
 Exec=/usr/local/bin/gts9wifi-to-android
 Icon=system-reboot
 Terminal=false

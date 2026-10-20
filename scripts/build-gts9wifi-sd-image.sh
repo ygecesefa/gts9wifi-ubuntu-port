@@ -1,9 +1,11 @@
 #!/bin/bash
 # Build the gts9wifi microSD image from the stage A rootfs.
 #
-#   p1  FAT32 GTS9W_BACK  512 MiB   Android boot-set backup + restore zip, written
-#                                   by the recovery installer; FAT so that any
-#                                   recovery (and Android) can read it
+#   p1  FAT32 GTS9W_BACK  1 GiB     the two switch zips, flashable in any
+#                                   recovery: ubuntu-boot.zip (put here by this
+#                                   script) and android-restore.zip (+ android/,
+#                                   written by the recovery installer); FAT so
+#                                   that any recovery (and Android) can read it
 #   p2  ext4  GTS9W_BOOT  512 MiB   /boot (kernel, initramfs, DTB copies)
 #   p3  ext4  GTS9W_ROOT  rest      /     (grown to the whole card on first boot)
 #
@@ -21,10 +23,12 @@ rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 out=${SD_IMAGE_OUT:-$root/build/gts9wifi-sd.img}
 slack_mib=${SLACK_MIB:-3072}
 boot_mib=512
-back_mib=512
+back_mib=1024
+boot_zip=${UBUNTU_BOOT_ZIP:-$root/build/gts9wifi-installer/ubuntu-boot.zip}
 
 [ "$(id -u)" = 0 ] || { echo 'run as root' >&2; exit 1; }
 test -d "$rootfs/etc" || { echo "missing rootfs: $rootfs" >&2; exit 1; }
+test -f "$boot_zip" || { echo "missing $boot_zip (build-gts9wifi-ubuntu-boot-zip.sh)" >&2; exit 1; }
 
 used_mib=$(du -sm --exclude=./boot "$rootfs" | cut -f1)
 root_mib=$(( (used_mib * 115 / 100) + slack_mib ))
@@ -56,6 +60,8 @@ mkfs.ext4 -q -L GTS9W_BOOT "${loop}p2"
 mkfs.ext4 -q -L GTS9W_ROOT "${loop}p3"
 mount "${loop}p1" "$mnt"
 cp "$repo/installer/GTS9W_BACK-README.txt" "$mnt/README.txt"
+cp "$boot_zip" "$mnt/ubuntu-boot.zip"
+cmp "$boot_zip" "$mnt/ubuntu-boot.zip"
 umount "$mnt"
 mount "${loop}p3" "$mnt"
 mkdir -p "$mnt/boot"

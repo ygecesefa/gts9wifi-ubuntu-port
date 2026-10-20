@@ -233,6 +233,10 @@ static int cmd_unzstd(const char *inpath, const char *outpath)
 		done += got;
 		int pct = (int)(done * 100 / total);
 		if (pct / 5 != last / 5) {
+			/* Writes land in the page cache first (12 GB of RAM): flush
+			 * before each step so the percentage is what is on the card. */
+			if (fdatasync(out))
+				return die("fdatasync");
 			printf("%d\n", pct);
 			fflush(stdout);
 			last = pct;

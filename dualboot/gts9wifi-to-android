@@ -5,11 +5,11 @@
 # nothing (checks fail) or refuses to reboot (read-back mismatch), and the
 # reason is shown here.
 out=$(mktemp)
-notify-send -u critical -i system-reboot "Android'e geçiliyor" \
-	"Android önyükleme imajları yazılıyor, tablet yeniden başlayacak…"
+notify-send -u critical -i system-reboot "Switching to Android" \
+	"Writing the Android boot images; the tablet will restart…"
 if ! sudo -n /usr/local/sbin/ubuntu-to-android >"$out" 2>&1; then
 	logger -t gts9wifi-to-android -f "$out"
-	zenity --error --width=480 --title="Android'e geçilemedi" \
-		--text="Geçiş tamamlanmadı; tablet yeniden başlatılmadı.\n\n$(tail -n 6 "$out")"
+	zenity --error --width=480 --title="Could not switch to Android" \
+		--text="The switch did not complete; the tablet was not restarted.\n\n$(tail -n 6 "$out")"
 fi
 rm -f "$out"
