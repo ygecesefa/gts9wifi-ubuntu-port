@@ -50,7 +50,10 @@ The installer, all on the tablet:
 1. checks the device, the card and the package (sha256 of every file);
 2. **backs up this tablet's own Android boot images**, whatever Android version
    it runs, and builds `android-restore.zip` from them;
-3. asks before erasing the card: **Volume Up = yes, Volume Down = no**;
+3. asks before erasing the card. In recovery: **Volume Up = yes, Volume Down =
+   no**. From Magisk: **press a volume key twice = yes, once = no** (Android
+   swaps the two keys when the tablet is rotated, so there the number of
+   presses counts, not the key);
 4. writes Ubuntu to the card and reads it back;
 5. builds `ubuntu-boot.zip` and puts both **switch zips** on the card's
    `GTS9W_BACK` partition (from Magisk: also the fingerprint calibration);
@@ -61,7 +64,7 @@ tablet starts Android as before. Reboot: Ubuntu starts, and the root
 filesystem grows to the whole card on the first boot.
 
 Already installed from recovery? Install the same zip from Magisk once and
-answer **Volume Up = keep** when it finds Ubuntu on the card: it then only
+answer **yes = keep** (a volume key twice) when it finds Ubuntu on the card: it then only
 installs the Magisk module and copies the Android backup and fingerprint
 calibration; the card is not erased.
 

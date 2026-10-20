@@ -3,6 +3,11 @@
 //
 //   gts9w-tool keys SECONDS          wait for Volume Up (exit 0) or Volume
 //                                    Down (exit 1); 2 on timeout or error
+//   gts9w-tool presses SECONDS       count volume-key presses, either key:
+//                                    two or more (exit 0), one (exit 1), none
+//                                    in SECONDS or error (2).  In Android,
+//                                    which physical key sends Volume Up
+//                                    depends on the screen rotation.
 //   gts9w-tool extract ZIP NAME OUT  copy one stored (uncompressed) entry
 //   gts9w-tool unzstd IN OUT         decompress a .zst file to a file or a
 //                                    block device, printing progress
@@ -39,10 +44,21 @@ static int die(const char *what)
 
 /* ---- keys ------------------------------------------------------------ */
 
-static int cmd_keys(int seconds)
+static long now_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000L + ts.tv_nsec / 1000000;
+}
+
+/* keys: the first Volume Up / Down release decides.  presses: any volume
+ * key; after the first release, more releases within 1.5 s each are
+ * counted. */
+static int cmd_keys(int seconds, int count)
 {
 	struct pollfd fds[32];
-	int n = 0;
+	int n = 0, presses = 0;
 	DIR *dir = opendir("/dev/input");
 	struct dirent *de;
 
@@ -70,13 +86,13 @@ static int cmd_keys(int seconds)
 			;
 	}
 
-	time_t end = time(NULL) + seconds;
+	long end = now_ms() + seconds * 1000L;
 	for (;;) {
-		int left = (int)(end - time(NULL));
+		long left = end - now_ms();
 
 		if (left <= 0)
-			return 2;
-		if (poll(fds, n, left * 1000) <= 0)
+			return presses >= 2 ? 0 : presses == 1 ? 1 : 2;
+		if (poll(fds, n, (int)left) <= 0)
 			continue;
 		for (int i = 0; i < n; i++) {
 			struct input_event ev;
@@ -88,10 +104,12 @@ static int cmd_keys(int seconds)
 				 * when the next question starts listening. */
 				if (ev.type != EV_KEY || ev.value != 0)
 					continue;
-				if (ev.code == KEY_VOLUMEUP)
-					return 0;
-				if (ev.code == KEY_VOLUMEDOWN)
-					return 1;
+				if (ev.code != KEY_VOLUMEUP && ev.code != KEY_VOLUMEDOWN)
+					continue;
+				if (!count)
+					return ev.code == KEY_VOLUMEUP ? 0 : 1;
+				presses++;
+				end = now_ms() + 1500;
 			}
 		}
 	}
@@ -364,7 +382,9 @@ static int cmd_zip(const char *outpath, int argc, char **argv)
 int main(int argc, char **argv)
 {
 	if (argc >= 3 && !strcmp(argv[1], "keys"))
-		return cmd_keys(atoi(argv[2]));
+		return cmd_keys(atoi(argv[2]), 0);
+	if (argc >= 3 && !strcmp(argv[1], "presses"))
+		return cmd_keys(atoi(argv[2]), 1);
 	if (argc == 5 && !strcmp(argv[1], "extract"))
 		return cmd_extract(argv[2], argv[3], argv[4]);
 	if (argc == 4 && !strcmp(argv[1], "unzstd"))
@@ -375,7 +395,7 @@ int main(int argc, char **argv)
 	}
 	if (argc >= 4 && !strcmp(argv[1], "zip"))
 		return cmd_zip(argv[2], argc - 3, argv + 3);
-	fprintf(stderr, "usage: gts9w-tool keys SECONDS | extract ZIP NAME OUT | "
+	fprintf(stderr, "usage: gts9w-tool keys|presses SECONDS | extract ZIP NAME OUT | "
 		"unzstd IN OUT | zip [-0] OUT NAME=FILE...\n");
 	return 2;
 }

@@ -71,13 +71,22 @@ size_of() {
 		dtbo) echo 16777216 ;;
 	esac
 }
-# Volume Up -> 0, Volume Down or 60 s without an answer -> 1.
+# YES -> 0; NO or 60 s without an answer -> 1.  Recovery: Volume Up / Down.
+# Android swaps the two keys with the screen rotation (the key that turns
+# the volume down in landscape sends Volume Up), so there it counts presses
+# of either key instead: two = YES, one = NO.
 ask() {
 	ui ""
 	for line in "$@"; do ui "$line"; done
-	ui "  Volume Up   = YES"
-	ui "  Volume Down = NO   (no answer in 60 s: NO)"
-	$TOOL keys 60
+	if [ $MODE = android ]; then
+		ui "  YES: press a volume key TWICE"
+		ui "  NO:  press it once   (no answer in 60 s: NO)"
+		$TOOL presses 60
+	else
+		ui "  Volume Up   = YES"
+		ui "  Volume Down = NO   (no answer in 60 s: NO)"
+		$TOOL keys 60
+	fi
 	[ $? = 0 ]
 }
 # Before the card is erased.  Android's vold mounts the card's FAT itself

@@ -46,7 +46,11 @@ directly.
    `android-restore.zip` from them, then reads it back. If the partitions already
    hold an Ubuntu set, it looks for an earlier backup on the card instead (and
    asks before going on without one).
-3. Asks: the microSD will be erased (Volume Up = yes, Volume Down or 60 s = no).
+3. Asks: the microSD will be erased. Recovery: Volume Up = yes, Volume Down
+   or 60 s = no. Android: a volume key twice = yes, once or 60 s = no
+   (`gts9w-tool presses`), because Android swaps the keys with the screen
+   rotation: in landscape the key that turns the volume down sends
+   `KEY_VOLUMEUP` (measured on the tablet with `getevent`).
 4. Writes the Ubuntu image to the card and reads it back.
 5. Builds `ubuntu-boot.zip` from its own copy of the Ubuntu boot images and
    puts both switch zips on `GTS9W_BACK`, the card's FAT partition. In Android
@@ -61,7 +65,7 @@ to unmount the card (`sm unmount`) before erasing, and after writing waits
 until vold has checked and mounted the new FAT before writing to it.
 
 From Magisk, on a card that already holds Ubuntu, the first question is
-*keep it?* — Volume Up keeps the card and its Ubuntu and only refreshes
+*keep it?* — yes keeps the card and its Ubuntu and only refreshes
 `android-restore.zip`, copies the calibration and installs the module (for
 users who installed from recovery first).
 

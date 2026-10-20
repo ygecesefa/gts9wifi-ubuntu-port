@@ -43,14 +43,25 @@ if [ "${TEST_MODE:-recovery}" = magisk ]; then
 	done
 fi
 : > $S/outfd.log
-# Answer each "Volume Up" question in turn.
+# Answer each question in turn.  Recovery: Volume Up (y) / Down (n).
+# TEST_MODE=magisk: presses of one key, as Android swaps them on rotation:
+# two (y) / one (n), sent as the swapped key a landscape tablet sends.
 (
 	asked=0
+	press() {
+		python3 -c "import struct,sys; sys.stdout.buffer.write(struct.pack('qqHHi',0,0,1,$1,1)+struct.pack('qqHHi',0,0,1,$1,0))" > /dev/input/event0
+	}
 	for a in $(echo $answers | sed 's/./& /g'); do
-		while [ "$(grep -c 'Volume Up' $S/outfd.log)" -le $asked ]; do sleep 0.3; done
+		while [ "$(grep -c 'Volume Up\|volume key TWICE' $S/outfd.log)" -le $asked ]; do sleep 0.3; done
 		asked=$((asked + 1)); sleep 1.5
-		code=115; [ $a = n ] && code=114
-		python3 -c "import struct,sys; sys.stdout.buffer.write(struct.pack('qqHHi',0,0,1,$code,1)+struct.pack('qqHHi',0,0,1,$code,0))" > /dev/input/event0
+		if [ "${TEST_MODE:-recovery}" = magisk ]; then
+			press 115
+			if [ $a = y ]; then sleep 0.5; press 115; fi
+			sleep 2
+		else
+			code=115; [ $a = n ] && code=114
+			press $code
+		fi
 	done
 ) &
 feeder=$!

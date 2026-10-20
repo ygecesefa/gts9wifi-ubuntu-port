@@ -43,21 +43,22 @@ the install. TWRP's sideload screen may show no log; the zip still runs (adb
 on the PC shows the progress).
 
 For the fingerprint reader, afterwards in Android: install the same zip from
-the Magisk app once and answer **Volume Up = keep** (see below).
+the Magisk app once and answer **keep** (see below).
 
 ## From the Magisk app
 
 1. Insert the card. Magisk → *Modules* → *Install from storage* → the zip.
-2. Answer the questions with the volume keys (Volume Up = yes).
+2. Answer the questions with the volume keys: **twice = yes, once = no**
+   (either key: Android swaps Volume Up and Down when the tablet is rotated).
 3. Reboot: Ubuntu starts.
 
 The installer then also copies the fingerprint calibration to the card and
 leaves the Magisk module, the Android → Ubuntu switch, installed.
 
 If the card already holds Ubuntu, the first question is whether to **keep**
-it: Volume Up keeps the card as it is and only refreshes the Android backup,
+it: yes keeps the card as it is and only refreshes the Android backup,
 copies the calibration and installs the module (nothing is erased and the
-boot partitions are not written). Volume Down goes on to the full install.
+boot partitions are not written). No goes on to the full install.
 
 ## First login
 
