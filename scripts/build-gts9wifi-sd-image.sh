@@ -1,12 +1,16 @@
 #!/bin/bash
 # Build the gts9wifi microSD image from the stage A rootfs.
 #
-#   p1  ext4  GTS9W_BOOT  512 MiB   /boot (kernel, initramfs, DTB copies)
-#   p2  ext4  GTS9W_ROOT  rest      /     (grown to the whole card on first boot)
+#   p1  FAT32 GTS9W_BACK  512 MiB   Android boot-set backup + restore zip, written
+#                                   by the recovery installer; FAT so that any
+#                                   recovery (and Android) can read it
+#   p2  ext4  GTS9W_BOOT  512 MiB   /boot (kernel, initramfs, DTB copies)
+#   p3  ext4  GTS9W_ROOT  rest      /     (grown to the whole card on first boot)
 #
 # MBR, 512-byte sectors (the X710 microSD uses 512-byte logical sectors).
 # The image is kept small so writing it over adb is quick; the
-# gts9wifi-grow-rootfs service expands p2 on the card.
+# gts9wifi-grow-rootfs service expands p3 (the last partition) on the card.
+# Ubuntu finds every partition by label, never by number.
 #
 # Needs root (loop devices).  Never touches a real block device.
 set -euo pipefail
@@ -17,14 +21,15 @@ rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 out=${SD_IMAGE_OUT:-$root/build/gts9wifi-sd.img}
 slack_mib=${SLACK_MIB:-3072}
 boot_mib=512
+back_mib=512
 
 [ "$(id -u)" = 0 ] || { echo 'run as root' >&2; exit 1; }
 test -d "$rootfs/etc" || { echo "missing rootfs: $rootfs" >&2; exit 1; }
 
 used_mib=$(du -sm --exclude=./boot "$rootfs" | cut -f1)
 root_mib=$(( (used_mib * 115 / 100) + slack_mib ))
-total_mib=$(( 4 + boot_mib + root_mib ))
-echo "== image: ${total_mib} MiB (rootfs ${used_mib} MiB used, p2 ${root_mib} MiB)"
+total_mib=$(( 4 + back_mib + boot_mib + root_mib ))
+echo "== image: ${total_mib} MiB (rootfs ${used_mib} MiB used, p3 ${root_mib} MiB)"
 
 rm -f "$out"
 truncate -s "${total_mib}M" "$out"
@@ -32,8 +37,9 @@ sfdisk --quiet "$out" <<EOF
 label: dos
 unit: sectors
 sector-size: 512
-start=8192, size=$((boot_mib * 2048)), type=83
-start=$((8192 + boot_mib * 2048)), type=83
+start=8192, size=$((back_mib * 2048)), type=c
+start=$((8192 + back_mib * 2048)), size=$((boot_mib * 2048)), type=83
+start=$((8192 + (back_mib + boot_mib) * 2048)), type=83
 EOF
 
 loop=$(losetup --show -f -P "$out")
@@ -45,11 +51,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkfs.ext4 -q -L GTS9W_BOOT "${loop}p1"
-mkfs.ext4 -q -L GTS9W_ROOT "${loop}p2"
-mount "${loop}p2" "$mnt"
+mkfs.vfat -F 32 -n GTS9W_BACK "${loop}p1" >/dev/null
+mkfs.ext4 -q -L GTS9W_BOOT "${loop}p2"
+mkfs.ext4 -q -L GTS9W_ROOT "${loop}p3"
+mount "${loop}p1" "$mnt"
+cp "$repo/installer/GTS9W_BACK-README.txt" "$mnt/README.txt"
+umount "$mnt"
+mount "${loop}p3" "$mnt"
 mkdir -p "$mnt/boot"
-mount "${loop}p1" "$mnt/boot"
+mount "${loop}p2" "$mnt/boot"
 
 echo "== copying rootfs"
 # Only versioned trees belong in /usr/lib/modules; skip anything a broken
@@ -66,9 +76,9 @@ ls "$mnt"/boot/initrd.img-* >/dev/null
 
 sync
 umount "$mnt/boot" "$mnt"
-e2fsck -fy "${loop}p1" >/dev/null || true
 e2fsck -fy "${loop}p2" >/dev/null || true
-blkid "${loop}p1" "${loop}p2"
+e2fsck -fy "${loop}p3" >/dev/null || true
+blkid "${loop}p1" "${loop}p2" "${loop}p3"
 cleanup
 trap - EXIT
 

@@ -1,0 +1,5 @@
+# The microSD's FAT partition GTS9W_BACK holds the Android boot-set backup and
+# android-restore.zip written by the recovery installer.  Keep it out of Files
+# and the dock so it is not deleted by accident; recovery and Android still
+# see it.
+ENV{ID_FS_LABEL}=="GTS9W_BACK", ENV{UDISKS_IGNORE}="1"

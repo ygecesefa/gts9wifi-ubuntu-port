@@ -1,0 +1,14 @@
+[Unit]
+Description=Take this tablet's Android backup (and fingerprint calibration) from the microSD
+Documentation=file:///usr/libexec/gts9wifi-import-backup
+# GTS9W_BACK is written by the recovery installer zip; Ubuntu only reads it.
+After=local-fs.target
+Before=gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service fprintd.service
+ConditionPathExists=/dev/disk/by-label/GTS9W_BACK
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/gts9wifi-import-backup
+
+[Install]
+WantedBy=multi-user.target

@@ -307,16 +307,24 @@ rm -rf "$rootfs/usr/share/qcom/sm8550/Samsung/gts9wifi"
 tar -xzf "$sensor_tree" -C "$rootfs/usr/share/qcom/sm8550/Samsung" --no-same-owner
 chroot "$rootfs" chown -R fastrpc:fastrpc /usr/share/qcom/sm8550/Samsung/gts9wifi
 
-# Ubuntu -> Android switch: the Android boot set saved before installation.
-android=${ANDROID_BACKUP_DIR:-$root/backups/android-20261017}
+# Ubuntu -> Android switch.  The Android boot set is per tablet (it must match
+# that tablet's Android build), so a release image carries none: the recovery
+# installer saves the tablet's own set to GTS9W_BACK and
+# gts9wifi-import-backup takes it from there at boot.  ANDROID_BACKUP_DIR
+# embeds a set for a personal image only.
 db=$rootfs/usr/share/gts9wifi-dualboot/android
+rm -rf "$db"
 install -d -m 0700 "$db"
-for n in boot init_boot vendor_boot dtbo; do
-	install -m 0600 "$android/$n.img" "$db/$n.img"
-done
-(cd "$db" && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img > SHA256SUMS)
-diff <(grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' "$android/SHA256SUMS" | sort) \
-	<(sort "$db/SHA256SUMS") >/dev/null || { echo 'Android boot set differs from the backup' >&2; exit 1; }
+if [ -n "${ANDROID_BACKUP_DIR:-}" ]; then
+	android=$ANDROID_BACKUP_DIR
+	for n in boot init_boot vendor_boot dtbo; do
+		install -m 0600 "$android/$n.img" "$db/$n.img"
+	done
+	(cd "$db" && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img > SHA256SUMS)
+	diff <(grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' "$android/SHA256SUMS" | sort) \
+		<(sort "$db/SHA256SUMS") >/dev/null || { echo 'Android boot set differs from the backup' >&2; exit 1; }
+	echo "  embedded Android boot set from $android (personal image)"
+fi
 install -m 0755 "$repo/dualboot/ubuntu-to-android" "$rootfs/usr/local/sbin/ubuntu-to-android"
 printf '%%sudo ALL=(root) NOPASSWD: /usr/local/sbin/ubuntu-to-android\n' > "$rootfs/etc/sudoers.d/gts9wifi-android"
 chmod 0440 "$rootfs/etc/sudoers.d/gts9wifi-android"
@@ -334,7 +342,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	gts9wifi-x11-dir-fix.path vendor-dsp.mount vendor-firmware_mnt.mount \
 	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
 	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
-	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path \
+	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path gts9wifi-import-backup.service \
 	gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service \
 	gts9wifi-fingerprint-ui.service \
 	ssh.service NetworkManager.service; do

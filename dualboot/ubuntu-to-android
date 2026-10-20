@@ -18,7 +18,11 @@ declare -A EXPECTED=(
 
 echo "Ubuntu -> Android (gts9wifi)"
 [[ $EUID -eq 0 ]] || { echo "Hata: root yetkisi gerekli."; exit 1; }
-[[ -f "$BASE/SHA256SUMS" ]] || { echo "Eksik: $BASE/SHA256SUMS"; exit 1; }
+[[ -f "$BASE/SHA256SUMS" ]] || {
+    echo "Bu tabletin Android yedeği yok ($BASE boş)."
+    echo "Kurulum zip'i yedeği SD karttaki GTS9W_BACK bölümüne koyar; Ubuntu açılışta onu alır."
+    echo "Android'e dönüş: recovery'den GTS9W_BACK/android-restore.zip ya da PC'den fastboot."
+    exit 1; }
 
 for name in boot init_boot vendor_boot dtbo; do
     img="$BASE/$name.img"

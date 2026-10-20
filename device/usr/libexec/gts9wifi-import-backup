@@ -1,0 +1,143 @@
+#!/usr/bin/python3
+"""Take this tablet's own Android backup from the microSD into Ubuntu.
+
+The recovery installer zip (installer/install.sh) writes the tablet's Android
+boot images, read from its partitions just before Ubuntu was installed, to the
+card's FAT partition GTS9W_BACK:
+
+  android-restore.zip       flashable in recovery (way back without Ubuntu)
+  android/*.img, SHA256SUMS the same images, unpacked
+  fingerprint/*.dat         optional: the sensor's factory calibration, once
+                            a recovery can read Android's /data
+
+Recovery never writes Ubuntu's root.  At every boot this copies whatever is
+new on GTS9W_BACK into place, after checking every sha256:
+
+  android/  -> /usr/share/gts9wifi-dualboot/android   ("Switch to Android")
+  fingerprint/calib.dat, egoptbds.dat -> /var/lib/gts9wifi/fingerprint/firmware
+
+Nothing is ever written to GTS9W_BACK (mounted read-only); the backup and the
+zip stay on the card.  A set that does not verify is reported and skipped.
+"""
+import hashlib
+import os
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+LABEL = Path('/dev/disk/by-label/GTS9W_BACK')
+ANDROID_SET = Path('/usr/share/gts9wifi-dualboot/android')
+FP_FIRMWARE = Path('/var/lib/gts9wifi/fingerprint/firmware')
+SIZES = {'boot': 100663296, 'init_boot': 8388608,
+         'vendor_boot': 100663296, 'dtbo': 16777216}
+FP_FILES = ('calib.dat', 'egoptbds.dat')
+
+
+def log(msg):
+    print(f'gts9wifi-import-backup: {msg}', flush=True)
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def sums(text):
+    out = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            out[parts[1].lstrip('*')] = parts[0]
+    return out
+
+
+def read_android(back):
+    """The four images and their SHA256SUMS, from android/ or the zip."""
+    d = back / 'android'
+    if (d / 'SHA256SUMS').is_file():
+        files = {n: d / n for n in ['SHA256SUMS'] + [f'{k}.img' for k in SIZES]}
+        if all(p.is_file() for p in files.values()):
+            return {n: p.read_bytes() for n, p in files.items()}, 'android/'
+    z = back / 'android-restore.zip'
+    if z.is_file():
+        with zipfile.ZipFile(z) as zf:
+            names = ['SHA256SUMS'] + [f'{k}.img' for k in SIZES]
+            return {n: zf.read(f'android/{n}') for n in names}, 'android-restore.zip'
+    return None, None
+
+
+def verified(data):
+    want = sums(data['SHA256SUMS'].decode())
+    for k, size in SIZES.items():
+        img = data[f'{k}.img']
+        if len(img) != size or sha256(img) != want.get(f'{k}.img'):
+            return False
+    return True
+
+
+def install(dest, name, data, mode=0o600):
+    tmp = dest / f'.{name}.new'
+    with open(tmp, 'wb') as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, dest / name)
+
+
+def import_android(back):
+    data, source = read_android(back)
+    if data is None:
+        log('no Android backup on GTS9W_BACK')
+        return
+    if not verified(data):
+        log(f'Android backup in {source} does not verify; Switch to Android set left as it is')
+        return
+    current = ANDROID_SET / 'SHA256SUMS'
+    if current.is_file() and sums(current.read_text()) == sums(data['SHA256SUMS'].decode()):
+        log('Switch to Android set is already this backup')
+        return
+    ANDROID_SET.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for k in SIZES:
+        install(ANDROID_SET, f'{k}.img', data[f'{k}.img'])
+    install(ANDROID_SET, 'SHA256SUMS', data['SHA256SUMS'])
+    log(f'Switch to Android set taken from {source}')
+
+
+def import_fingerprint(back):
+    d = back / 'fingerprint'
+    if not all((d / f).is_file() for f in FP_FILES):
+        return
+    want = sums((d / 'SHA256SUMS').read_text()) if (d / 'SHA256SUMS').is_file() else {}
+    for f in FP_FILES:
+        data = (d / f).read_bytes()
+        if f in want and sha256(data) != want[f]:
+            log(f'fingerprint/{f} does not match its SHA256SUMS; skipped')
+            continue
+        target = FP_FIRMWARE / f
+        if target.is_file() and sha256(target.read_bytes()) == sha256(data):
+            continue
+        FP_FIRMWARE.mkdir(mode=0o700, parents=True, exist_ok=True)
+        install(FP_FIRMWARE, f, data)
+        log(f'fingerprint calibration {f} installed')
+
+
+def main():
+    if not LABEL.exists():
+        log('no GTS9W_BACK partition (older card layout); nothing to do')
+        return 0
+    with tempfile.TemporaryDirectory(prefix='gts9w-back-') as mnt:
+        subprocess.run(['mount', '-t', 'vfat', '-o', 'ro,nosuid,nodev,noexec',
+                        str(LABEL.resolve()), mnt], check=True)
+        try:
+            back = Path(mnt)
+            import_android(back)
+            import_fingerprint(back)
+        finally:
+            subprocess.run(['umount', mnt], check=False)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
