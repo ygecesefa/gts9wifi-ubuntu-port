@@ -92,7 +92,7 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | GPU (Adreno 740) | ✅ | Freedreno / Turnip, Mesa 25.2, Vulkan 1.4 |
 | Wi-Fi (WCN6855) | ✅ | 2.4 and 5 GHz, with the tablet's tuned board data |
 | Bluetooth | ✅ | the tablet's own address, read from EFS |
-| Audio | ✅ | speakers (CS35L45) |
+| Audio | ✅ | speakers (CS35L45), microphone |
 | Battery and charging | ✅ | **80 % charge limit and charge bypass** (Tab9 Extras app) |
 | Cameras (front, rear) | ✅ | libcamera + PipeWire, GNOME Snapshot |
 | Rear autofocus | ✅ | continuous AF on the DW9808 lens |
@@ -102,7 +102,7 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | Fingerprint (under-display EL721) | ✅ | unlock, sudo, polkit; needs the calibration step above |
 | On-screen keyboard | ✅ | GTK, Chromium, Firefox; floating keyboard button for X11 apps |
 | `/vendor` | ✅ | mapped read-only from Android's `super` (firmware source) |
-| Microphone, USB host, docks, DisplayPort | 🟡 | drivers from the Fedora port; not yet retested on Ubuntu |
+| USB host, docks, DisplayPort | 🟡 | drivers from the Fedora port; not tested on Ubuntu yet — reports welcome |
 
 ### Fixed compared to the Fedora port
 
