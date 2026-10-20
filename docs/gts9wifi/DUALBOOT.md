@@ -34,53 +34,72 @@ the scripts here are adapted from its `to-fedora.sh` and `astroid-to-android`.
 Never `dd` to `/dev/block/sda` or any `sdX` disk. A 15 GB card and a 238 GB
 UFS LUN are easy to tell apart: check `cat /proc/partitions` before writing.
 
+## The switch zips (GTS9W_BACK)
+
+Everything a switch needs is on the microSD's FAT partition `GTS9W_BACK`
+(Android shows it as the SD card's top folder; Ubuntu hides it):
+
+| File | What |
+|---|---|
+| `android-restore.zip` | this tablet's own Android boot set, read from its partitions by the installer zip (any Android version, Magisk patches included) |
+| `ubuntu-boot.zip` | the Ubuntu boot set of the image on this card, zipped on the tablet by the installer |
+| `fingerprint/` | `calib.dat`, `egoptbds.dat`, `SHA256SUMS`: the sensor calibration, copied from Android |
+
+Both zips are recovery zips (same loader as the installer): flash one in TWRP
+or LineageOS recovery, answer Volume Up, and it writes and verifies the four
+partitions. No root, no Android version dependence: this is the safe way to
+switch whatever state either system is in. They are made on the tablet and
+never published, since the Android images must be the user's own.
+
 ## Android → Ubuntu
 
-From a root shell on Android (Magisk `su`), with the Ubuntu boot images in
-`/sdcard/Ubuntu/images/` (i.e. `/data/media/0/Ubuntu/images/`):
+**Magisk module** (installed by the installer zip from the Magisk app, or by
+installing it again from Magisk and keeping the card):
 
-```sh
-su -c sh /data/local/tmp/to-ubuntu.sh
-```
+- Magisk 28+: the module's **action button**; KernelSU / APatch / WebUI X:
+  the module's **WebUI** (*Switch to Ubuntu*).
+- Both run `gts9w.sh ubuntu`: first `backup` (rebuild `android-restore.zip`
+  if this Android's boot images changed since it was made), then
+  `to-ubuntu.sh --yes`, which checks every image of `ubuntu-boot.zip`, copies
+  the fingerprint calibration to the card, writes, reads back and reboots.
+- At every Android boot `service.sh` runs the same `backup` and copies the
+  calibration, so the card always holds the Android set this Android boots
+  with (log: `/data/adb/modules/gts9wifi-ubuntu/service.log`).
 
-The script checks that the device is a `gts9wifi`, that every image and every
-partition has the expected size, that every image matches `SHA256SUMS`, asks
-you to type `UBUNTU`, writes the four images, reads them back to verify, and
-reboots.
+**Without the module**, from a root shell: `su -c sh /data/local/tmp/to-ubuntu.sh`
+(asks you to type `UBUNTU`). On a card with `GTS9W_BACK` it only uses that
+card's `ubuntu-boot.zip`; older cards fall back to `/sdcard/Ubuntu/images/`.
 
-Before writing, it also hands the fingerprint sensor's factory calibration
-(`calib.dat`, `egoptbds.dat` from Android's `/data/vendor/biometrics/meta`) to
-Ubuntu. On cards with the FAT partition `GTS9W_BACK` (v0.2.0-pre3 layout) it
-goes to `GTS9W_BACK/fingerprint/` with a `SHA256SUMS`, and Ubuntu's
-`gts9wifi-import-backup` installs it at the next boot (0600 root). On older
-cards it is written straight to `/var/lib/gts9wifi/fingerprint/firmware/` on
-`GTS9W_ROOT`. These files are unique to each tablet and exist only in
-Android's encrypted `/data`, so they are never part of the image. Note that
-Android mounts `GTS9W_BACK` as SD-card storage, so apps with storage access
-can read the calibration (it holds no fingerprints). If anything goes wrong
-the script prints a warning and the switch continues; only the fingerprint
-reader needs them.
+**Without root:** flash `GTS9W_BACK/ubuntu-boot.zip` in recovery.
+
+The fingerprint calibration (`calib.dat`, `egoptbds.dat` from Android's
+`/data/vendor/biometrics/meta`) is unique to each tablet and exists only in
+Android's encrypted `/data`, so it is never part of the image and no recovery
+can read it. Ubuntu's `gts9wifi-import-backup` installs it from
+`GTS9W_BACK/fingerprint/` (sha256 checked, 0600 root) at boot, and stops
+running once both files are in place. Android mounts `GTS9W_BACK` as SD-card
+storage, so apps with storage access can read the calibration (it holds no
+fingerprints).
 
 ## Recovery installer
 
 `ubuntu-gts9wifi-<version>-installer.zip` installs everything from recovery
-(LineageOS recovery or TWRP, best via `adb sideload`): it backs up this
-tablet's Android boot images into `GTS9W_BACK/android-restore.zip`, erases and
-writes the microSD after a Volume Up / Volume Down question, and writes the
-Ubuntu boot images last. Flash `android-restore.zip` in recovery to go back to
-Android. Details: [installer/README.md](../../installer/README.md).
+(LineageOS recovery or TWRP, best via `adb sideload`) or from the Magisk app.
+Details: [installer/README.md](../../installer/README.md).
 
 ## Ubuntu → Android
 
-In Ubuntu, open **Android'e Geç** (Switch to Android) from the app grid, or:
+In Ubuntu, open **Switch to Android** from the dock or app grid, or:
 
 ```sh
 sudo ubuntu-to-android
 ```
 
-It restores the four Android images saved in
-`/usr/share/gts9wifi-dualboot/android/` (taken from your own tablet before the
-first install), verifies them against `SHA256SUMS`, and reboots.
+It mounts `GTS9W_BACK` read-only, takes the four images from
+`android-restore.zip` (older cards: `GTS9W_BACK/android/`, or the set in
+`/usr/share/gts9wifi-dualboot/android/`), verifies them against `SHA256SUMS`,
+writes, reads back, and reboots. Without Ubuntu: flash
+`GTS9W_BACK/android-restore.zip` in recovery.
 
 ## If Ubuntu does not boot
 

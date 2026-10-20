@@ -1,0 +1,6 @@
+id=gts9wifi-ubuntu
+name=Ubuntu for Galaxy Tab S9 Wi-Fi
+version=@VERSION@
+versionCode=@VERSIONCODE@
+author=ygecesefa
+description=Ubuntu 24.04 on the microSD: one-tap switch to Ubuntu (action button, WebUI); keeps this tablet's Android backup on the card current after updates.

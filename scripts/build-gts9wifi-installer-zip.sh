@@ -1,20 +1,24 @@
 #!/bin/bash
-# Build the recovery installer zip: ubuntu-gts9wifi-<version>-installer.zip
+# Build the installer zip: ubuntu-gts9wifi-<version>-installer.zip
 #
-# Flashed in recovery (LineageOS recovery or TWRP, best via `adb sideload`),
-# it backs up the tablet's Android boot images into an android-restore.zip it
-# builds on the device, erases the microSD and writes the Ubuntu image, then
-# writes the four Ubuntu boot images.  Layout (AnyKernel3-style):
+# One zip, flashed in recovery (LineageOS recovery or TWRP, best via
+# `adb sideload`) or installed from the Magisk app as a module.  It backs up
+# the tablet's own Android boot images, erases the microSD and writes the
+# Ubuntu image, puts the two switch zips it makes on the tablet
+# (android-restore.zip, ubuntu-boot.zip) on the card, then writes the four
+# Ubuntu boot images.  Layout (AnyKernel3-style, plus a Magisk module):
 #   META-INF/com/google/android/update-binary   loader + gts9w-tool
-#   META-INF/com/google/android/updater-script  placeholder
+#   META-INF/com/google/android/updater-script  #MAGISK (the Magisk app's check)
+#   module.prop, customize.sh                   Magisk module (installer/magisk)
+#   module/                                     the module's files
 #   gts9wifi/install.sh                         the installer itself
-#   gts9wifi/restore.sh                         goes into android-restore.zip
+#   gts9wifi/restore.sh                         goes into both switch zips
 #   gts9wifi/{sd.img.zst,*.img,SHA256SUMS,version.txt}
 #
 # Inputs: the SD image (build-gts9wifi-sd-image.sh), the boot set
-# (build-gts9wifi-bundle.sh) and the loader built with ubuntu-boot.zip
-# (build-gts9wifi-ubuntu-boot-zip.sh, run before the SD image).  Every payload entry is stored, not deflated:
-# the image is already zstd, and gts9w-tool only reads stored entries.
+# (build-gts9wifi-bundle.sh) and the loader (build-gts9wifi-recovery-loader.sh).
+# Every payload entry is stored, not deflated: the image is already zstd, and
+# gts9w-tool only reads stored entries.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,9 +33,9 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$out" "$work/p"
 
-echo "== loader (from build-gts9wifi-ubuntu-boot-zip.sh)"
-for f in "$out/gts9w-tool" "$out/update-binary" "$out/ubuntu-boot.zip"; do
-	test -f "$f" || { echo "missing: $f (run build-gts9wifi-ubuntu-boot-zip.sh)" >&2; exit 1; }
+echo "== loader (from build-gts9wifi-recovery-loader.sh)"
+for f in "$out/gts9w-tool" "$out/update-binary"; do
+	test -f "$f" || { echo "missing: $f (run build-gts9wifi-recovery-loader.sh)" >&2; exit 1; }
 done
 # The loader must carry the current sources, not a stale build.
 head -c "$(stat -c %s "$repo/installer/update-binary.sh")" "$out/update-binary" |
@@ -42,12 +46,6 @@ for f in "$sd" "$sd.zst" "$bundle"/{boot,init_boot,vendor_boot,dtbo}.img; do
 	test -f "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 (cd "$bundle" && sha256sum -c --quiet SHA256SUMS)
-# ubuntu-boot.zip (already inside the SD image) must hold this same boot set.
-for n in boot init_boot vendor_boot dtbo; do
-	[ "$(unzip -p "$out/ubuntu-boot.zip" ubuntu/$n.img | sha256sum | cut -d' ' -f1)" = \
-		"$(sha256sum < "$bundle/$n.img" | cut -d' ' -f1)" ] || {
-		echo "ubuntu-boot.zip $n.img differs from $bundle; rebuild it and the SD image" >&2; exit 1; }
-done
 raw_sha=$(grep " $sd\$" "$sd.SHA256SUMS" | cut -d' ' -f1)
 [ -n "$raw_sha" ] || { echo "no sha for $sd in $sd.SHA256SUMS" >&2; exit 1; }
 # The raw sha is trusted from the image build; check the .zst still matches it.
@@ -68,13 +66,25 @@ raw=$(stat -c %s "$sd")
 echo "raw_size $raw" >> "$work/p/SHA256SUMS"
 echo "raw_sectors $((raw / 512))" >> "$work/p/SHA256SUMS"
 
-printf '# gts9wifi Ubuntu installer: see gts9wifi/install.sh (run by update-binary)\n' > "$work/updater-script"
+# The Magisk app installs a zip only if its updater-script says #MAGISK.
+printf '#MAGISK\n# gts9wifi Ubuntu installer: see gts9wifi/install.sh (run by update-binary)\n' > "$work/updater-script"
+sed -e "s/@VERSION@/$version/" -e "s/@VERSIONCODE@/$(git -C "$repo" rev-list --count HEAD)/" \
+	"$repo/installer/magisk/module.prop.in" > "$work/module.prop"
+mod=$repo/installer/magisk/module
+modargs=()
+for f in gts9w.sh service.sh action.sh webroot/index.html; do
+	modargs+=("module/$f=$mod/$f")
+done
+modargs+=("module/to-ubuntu.sh=$repo/dualboot/to-ubuntu.sh")
 
 echo "== zip"
 rm -f "$zip"
 "$out/gts9w-tool" zip -0 "$zip" \
 	META-INF/com/google/android/update-binary="$out/update-binary" \
 	META-INF/com/google/android/updater-script="$work/updater-script" \
+	module.prop="$work/module.prop" \
+	customize.sh="$repo/installer/magisk/customize.sh" \
+	"${modargs[@]}" \
 	gts9wifi/SHA256SUMS="$work/p/SHA256SUMS" \
 	gts9wifi/version.txt="$work/p/version.txt" \
 	gts9wifi/install.sh="$work/p/install.sh" \

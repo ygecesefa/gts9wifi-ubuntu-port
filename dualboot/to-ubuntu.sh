@@ -6,13 +6,16 @@
 # is never touched.  Run from a root shell (Magisk su).  On the way it copies
 # the fingerprint sensor's calibration to the microSD for Ubuntu.
 #
-# Without root, flash GTS9W_BACK/ubuntu-boot.zip in recovery instead.
+# Without root, flash GTS9W_BACK/ubuntu-boot.zip in recovery instead.  The
+# Magisk module (installer/magisk) runs this with --yes (no prompt) and
+# GTS9W_TOOL (its gts9w-tool, to unpack the zip without Android's unzip).
 #
-# Images, first found wins:
-#   1. GTS9W_BACK/ubuntu-boot.zip on the microSD: built with the image on that
-#      card, so kernel and modules always match
-#   2. /data/media/0/Ubuntu/images/{boot,init_boot,vendor_boot,dtbo}.img plus
-#      SHA256SUMS (build-gts9wifi-bundle.sh), for cards without the zip
+# Images:
+#   1. GTS9W_BACK/ubuntu-boot.zip on the microSD: made with the image on that
+#      card, so kernel and modules always match.  Required on such cards.
+#   2. only for older cards without GTS9W_BACK (v0.2.0-pre1/pre2 layout):
+#      /data/media/0/Ubuntu/images/{boot,init_boot,vendor_boot,dtbo}.img plus
+#      SHA256SUMS (build-gts9wifi-bundle.sh)
 set -eu
 
 BASE="/data/media/0/Ubuntu/images"
@@ -116,18 +119,29 @@ copy_fp_calibration() {
     return 0
 }
 
-# Prefer the boot set that came with the card (see the header).
+# Prefer the boot set that came with the card (see the header).  A card with
+# GTS9W_BACK always has its ubuntu-boot.zip: without it, stop rather than
+# write /data/media/0/Ubuntu/images, which may belong to another build (a
+# kernel without matching modules boots without Wi-Fi).
 pick_images() {
     open_back || return 0
     zip="$BACK_DIR/ubuntu-boot.zip"
-    [ -f "$zip" ] || return 0
+    [ -f "$zip" ] || { echo "ERROR: no ubuntu-boot.zip on GTS9W_BACK"; exit 1; }
     rm -rf "$UNPACK"
     mkdir -p "$UNPACK"
-    if unzip -o -q "$zip" 'ubuntu/*' -d "$UNPACK" 2>/dev/null && [ -f "$UNPACK/ubuntu/SHA256SUMS" ]; then
+    if [ -n "${GTS9W_TOOL:-}" ]; then
+        mkdir -p "$UNPACK/ubuntu"
+        for f in SHA256SUMS boot.img init_boot.img vendor_boot.img dtbo.img; do
+            "$GTS9W_TOOL" extract "$zip" "ubuntu/$f" "$UNPACK/ubuntu/$f" || rm -f "$UNPACK/ubuntu/SHA256SUMS"
+        done
+    else
+        unzip -o -q "$zip" 'ubuntu/*' -d "$UNPACK" 2>/dev/null || true
+    fi
+    if [ -f "$UNPACK/ubuntu/SHA256SUMS" ]; then
         BASE="$UNPACK/ubuntu"
         echo "Boot images: GTS9W_BACK/ubuntu-boot.zip (built with this card)"
     else
-        echo "WARNING: could not unpack $zip; using $BASE"
+        echo "ERROR: could not unpack $zip"; exit 1
     fi
 }
 
@@ -163,9 +177,11 @@ done
 echo
 echo "WARNING: the four boot partitions (boot, init_boot, vendor_boot, dtbo) will be rewritten."
 echo "Back to Android: 'Switch to Android' in Ubuntu, or GTS9W_BACK/android-restore.zip in recovery."
-echo "Type UBUNTU to continue:"
-read answer
-[ "$answer" = "UBUNTU" ] || { echo "Cancelled."; exit 0; }
+if [ "${1:-}" != --yes ]; then
+    echo "Type UBUNTU to continue:"
+    read answer
+    [ "$answer" = "UBUNTU" ] || { echo "Cancelled."; exit 0; }
+fi
 
 copy_fp_calibration
 

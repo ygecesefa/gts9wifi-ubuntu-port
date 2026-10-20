@@ -1,10 +1,14 @@
 [Unit]
-Description=Take this tablet's Android backup (and fingerprint calibration) from the microSD
+Description=Install the fingerprint calibration from the microSD (GTS9W_BACK)
 Documentation=file:///usr/libexec/gts9wifi-import-backup
-# GTS9W_BACK is written by the recovery installer zip; Ubuntu only reads it.
+# GTS9W_BACK is written from Android (installer zip via Magisk, the Magisk
+# module, to-ubuntu.sh); Ubuntu only reads it.  Runs at every boot until
+# both calibration files are installed, then never again.
 After=local-fs.target
 Before=gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service fprintd.service
 ConditionPathExists=/dev/disk/by-label/GTS9W_BACK
+ConditionPathExists=|!/var/lib/gts9wifi/fingerprint/firmware/calib.dat
+ConditionPathExists=|!/var/lib/gts9wifi/fingerprint/firmware/egoptbds.dat
 
 [Service]
 Type=oneshot

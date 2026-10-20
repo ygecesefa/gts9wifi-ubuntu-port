@@ -1,37 +1,31 @@
 #!/usr/bin/python3
-"""Take this tablet's own Android backup from the microSD into Ubuntu.
+"""Install this tablet's fingerprint calibration from the microSD.
 
-The recovery installer zip (installer/install.sh) writes the tablet's Android
-boot images, read from its partitions just before Ubuntu was installed, to the
-card's FAT partition GTS9W_BACK:
+The sensor's factory calibration (calib.dat, egoptbds.dat) exists only in
+Android's /data/vendor, which a recovery cannot read.  From Android, the
+installer zip (installed through the Magisk app), the Magisk module and
+to-ubuntu.sh put it on the card's FAT partition GTS9W_BACK:
 
-  android-restore.zip       flashable in recovery (way back without Ubuntu)
-  android/*.img, SHA256SUMS the same images, unpacked
-  fingerprint/*.dat         optional: the sensor's factory calibration, once
-                            a recovery can read Android's /data
+  fingerprint/calib.dat, egoptbds.dat, SHA256SUMS
 
-Recovery never writes Ubuntu's root.  At every boot this copies whatever is
-new on GTS9W_BACK into place, after checking every sha256:
+At boot this checks the sha256 and installs both files into
+/var/lib/gts9wifi/fingerprint/firmware.  The unit runs only while one of
+them is missing there (ConditionPathExists), so once the calibration is in
+place it stops running.  GTS9W_BACK is mounted read-only; nothing is ever
+written to it.
 
-  android/  -> /usr/share/gts9wifi-dualboot/android   ("Switch to Android")
-  fingerprint/calib.dat, egoptbds.dat -> /var/lib/gts9wifi/fingerprint/firmware
-
-Nothing is ever written to GTS9W_BACK (mounted read-only); the backup and the
-zip stay on the card.  A set that does not verify is reported and skipped.
+The Android boot images are not copied any more: "Switch to Android"
+(ubuntu-to-android) reads GTS9W_BACK/android-restore.zip itself.
 """
 import hashlib
 import os
 import subprocess
 import sys
 import tempfile
-import zipfile
 from pathlib import Path
 
 LABEL = Path('/dev/disk/by-label/GTS9W_BACK')
-ANDROID_SET = Path('/usr/share/gts9wifi-dualboot/android')
 FP_FIRMWARE = Path('/var/lib/gts9wifi/fingerprint/firmware')
-SIZES = {'boot': 100663296, 'init_boot': 8388608,
-         'vendor_boot': 100663296, 'dtbo': 16777216}
 FP_FILES = ('calib.dat', 'egoptbds.dat')
 
 
@@ -52,30 +46,6 @@ def sums(text):
     return out
 
 
-def read_android(back):
-    """The four images and their SHA256SUMS, from android/ or the zip."""
-    d = back / 'android'
-    if (d / 'SHA256SUMS').is_file():
-        files = {n: d / n for n in ['SHA256SUMS'] + [f'{k}.img' for k in SIZES]}
-        if all(p.is_file() for p in files.values()):
-            return {n: p.read_bytes() for n, p in files.items()}, 'android/'
-    z = back / 'android-restore.zip'
-    if z.is_file():
-        with zipfile.ZipFile(z) as zf:
-            names = ['SHA256SUMS'] + [f'{k}.img' for k in SIZES]
-            return {n: zf.read(f'android/{n}') for n in names}, 'android-restore.zip'
-    return None, None
-
-
-def verified(data):
-    want = sums(data['SHA256SUMS'].decode())
-    for k, size in SIZES.items():
-        img = data[f'{k}.img']
-        if len(img) != size or sha256(img) != want.get(f'{k}.img'):
-            return False
-    return True
-
-
 def install(dest, name, data, mode=0o600):
     tmp = dest / f'.{name}.new'
     with open(tmp, 'wb') as f:
@@ -84,25 +54,6 @@ def install(dest, name, data, mode=0o600):
         os.fsync(f.fileno())
     os.chmod(tmp, mode)
     os.replace(tmp, dest / name)
-
-
-def import_android(back):
-    data, source = read_android(back)
-    if data is None:
-        log('no Android backup on GTS9W_BACK')
-        return
-    if not verified(data):
-        log(f'Android backup in {source} does not verify; Switch to Android set left as it is')
-        return
-    current = ANDROID_SET / 'SHA256SUMS'
-    if current.is_file() and sums(current.read_text()) == sums(data['SHA256SUMS'].decode()):
-        log('Switch to Android set is already this backup')
-        return
-    ANDROID_SET.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for k in SIZES:
-        install(ANDROID_SET, f'{k}.img', data[f'{k}.img'])
-    install(ANDROID_SET, 'SHA256SUMS', data['SHA256SUMS'])
-    log(f'Switch to Android set taken from {source}')
 
 
 def import_fingerprint(back):
@@ -132,7 +83,6 @@ def main():
                         str(LABEL.resolve()), mnt], check=True)
         try:
             back = Path(mnt)
-            import_android(back)
             import_fingerprint(back)
         finally:
             subprocess.run(['umount', mnt], check=False)

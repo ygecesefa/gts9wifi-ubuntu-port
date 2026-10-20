@@ -312,10 +312,10 @@ tar -xzf "$sensor_tree" -C "$rootfs/usr/share/qcom/sm8550/Samsung" --no-same-own
 chroot "$rootfs" chown -R fastrpc:fastrpc /usr/share/qcom/sm8550/Samsung/gts9wifi
 
 # Ubuntu -> Android switch.  The Android boot set is per tablet (it must match
-# that tablet's Android build), so a release image carries none: the recovery
-# installer saves the tablet's own set to GTS9W_BACK and
-# gts9wifi-import-backup takes it from there at boot.  ANDROID_BACKUP_DIR
-# embeds a set for a personal image only.
+# that tablet's Android build), so a release image carries none: the
+# installer zip saves the tablet's own set to GTS9W_BACK/android-restore.zip
+# and ubuntu-to-android reads it from there.  ANDROID_BACKUP_DIR embeds a
+# set here, as a fallback, for a personal image only.
 db=$rootfs/usr/share/gts9wifi-dualboot/android
 rm -rf "$db"
 install -d -m 0700 "$db"

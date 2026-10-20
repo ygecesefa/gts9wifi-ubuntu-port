@@ -22,61 +22,80 @@ images are backed up first.
 
 ## Install
 
+One installer zip, two ways to run it: **in recovery** (TWRP, LineageOS
+recovery) or **from the Magisk app** as a module. Both do the same install;
+from Magisk you also get the Android-side switch and the fingerprint
+calibration in one go.
+
 You need:
 
-- an SM-X710 with an **unlocked bootloader** and a custom recovery (TWRP or
-  LineageOS recovery) that can `adb sideload`; tested on LineageOS 22
-- a **microSD card of 16 GB or more** (it is erased)
-- a PC with `adb`
+- an SM-X710 with an **unlocked bootloader**; tested on LineageOS 22
+- a **microSD card of 16 GB or more** (it is erased; not one adopted as
+  internal storage)
+- either a custom recovery with `adb sideload` and a PC with `adb`, or Magisk
+  (Magisk 28+ for the action button) with about 5 GB free internal storage
 
-Steps:
+Download `ubuntu-gts9wifi-<version>-installer.zip` from
+[Releases](../../releases) and check it: `sha256sum -c *.sha256`.
 
-1. Download `ubuntu-gts9wifi-<version>-installer.zip` from
-   [Releases](../../releases) and check it: `sha256sum -c *.sha256`.
-2. Put the microSD card into the tablet. Boot into recovery
-   (*Volume Up + Power*) and start *Apply update → Apply from ADB*
-   (TWRP: *Advanced → ADB Sideload*).
-3. On the PC: `adb sideload ubuntu-gts9wifi-<version>-installer.zip`
-4. The installer, all on the tablet:
-   1. checks the device, the card and the package (sha256 of every file);
-   2. **backs up this tablet's Android boot images** and builds
-      `android-restore.zip` from them;
-   3. asks before erasing the card: **Volume Up = yes, Volume Down = no**;
-   4. writes Ubuntu to the card and reads it back;
-   5. puts the switch zips on the card's `GTS9W_BACK` partition;
-   6. writes the Ubuntu boot images last, and verifies them.
+**From recovery:** put the card in, boot into recovery (*Volume Up + Power*),
+start *Apply update → Apply from ADB* (TWRP: *Advanced → ADB Sideload*), then on
+the PC: `adb sideload ubuntu-gts9wifi-<version>-installer.zip`
 
-   If anything fails before step 6, the boot partitions are untouched and the
-   tablet starts Android as before.
-5. Reboot. Ubuntu starts; the root filesystem grows to the whole card on the
-   first boot.
+**From Magisk:** put the card in, *Modules → Install from storage*, pick the
+zip. (KernelSU and APatch should work the same way; not tested yet.)
 
-The card can also be written from a PC with the raw image
-(`…-sd.img.zst`, see [INSTALL.md](docs/gts9wifi/INSTALL.md)).
+The installer, all on the tablet:
+
+1. checks the device, the card and the package (sha256 of every file);
+2. **backs up this tablet's own Android boot images**, whatever Android version
+   it runs, and builds `android-restore.zip` from them;
+3. asks before erasing the card: **Volume Up = yes, Volume Down = no**;
+4. writes Ubuntu to the card and reads it back;
+5. builds `ubuntu-boot.zip` and puts both **switch zips** on the card's
+   `GTS9W_BACK` partition (from Magisk: also the fingerprint calibration);
+6. writes the Ubuntu boot images last, and verifies them.
+
+If anything fails before step 6, the boot partitions are untouched and the
+tablet starts Android as before. Reboot: Ubuntu starts, and the root
+filesystem grows to the whole card on the first boot.
+
+Already installed from recovery? Install the same zip from Magisk once and
+answer **Volume Up = keep** when it finds Ubuntu on the card: it then only
+installs the Magisk module and copies the Android backup and fingerprint
+calibration; the card is not erased.
 
 ## Switching between Android and Ubuntu
 
-| From → to | Root needed | How |
-|---|---|---|
-| Ubuntu → Android | no | **Switch to Android** in the dock / app grid (one tap) |
-| Android → Ubuntu | yes (Magisk) | `su -c sh /data/local/tmp/to-ubuntu.sh` (or a Termux widget) |
-| either way, any ROM | no | flash a switch zip in recovery (below) |
+| From → to | How |
+|---|---|
+| Ubuntu → Android | **Switch to Android** in the dock / app grid (one tap) |
+| Android → Ubuntu | the Magisk module: its **action button** (Magisk 28+), or its WebUI (KernelSU, APatch, or WebUI X with Magisk) |
+| either way, no root, any ROM | flash a **switch zip** in recovery |
 
-The card's FAT partition `GTS9W_BACK` holds two **switch zips**, the safe way
-back whatever happens to either system:
+The switch zips are on the microSD, in its FAT partition `GTS9W_BACK` (in
+Android: the SD card's top folder):
 
-- `android-restore.zip` → Android: your tablet's own Android boot images,
-  saved by the installer
-- `ubuntu-boot.zip` → Ubuntu: the Ubuntu boot images that belong to this card
+| File | Flash it in recovery to |
+|---|---|
+| `GTS9W_BACK/android-restore.zip` | go back to **Android**: this tablet's own Android boot images |
+| `GTS9W_BACK/ubuntu-boot.zip` | go to **Ubuntu**: the Ubuntu boot images of this card |
 
-Flash one in recovery (*Install*, or `adb sideload`); it asks Volume Up / Down,
-writes `boot`, `init_boot`, `vendor_boot` and `dtbo` only, and verifies them.
-Keep these files: they are your way back without a PC.
+They are made on your tablet by the installer and are never downloaded:
+the Android images must be the ones of *your* Android build. Each zip asks
+Volume Up / Down, writes `boot`, `init_boot`, `vendor_boot` and `dtbo` only,
+and verifies them. "Switch to Android" in Ubuntu and the Magisk module use
+these same files. Keep them: they are your way back without a PC.
+
+After an Android (or Magisk) update the Magisk module refreshes
+`android-restore.zip` by itself at the next Android boot, and again right
+before each switch to Ubuntu.
 
 **Fingerprint:** the sensor's factory calibration exists only in Android's
-encrypted `/data`, which no recovery can read. Switch once from Android with
-`to-ubuntu.sh` (root): it copies the calibration to the card, and Ubuntu
-installs it at boot. Then enrol a finger in *Settings → Users*.
+encrypted `/data`, which no recovery can read. Installing from Magisk (or
+the Magisk module afterwards) copies it to `GTS9W_BACK/fingerprint/`;
+Ubuntu installs it at the next boot. Then enrol a finger in *Settings →
+Users*.
 
 Details and recovery paths: [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md).
 
@@ -121,10 +140,9 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 ## Known issues
 
 - **Browsers decode video in software** (no VA-API for the Qualcomm VPU).
-- **After an Android update**, `android-restore.zip` holds the *old* Android
-  boot images: do not flash an outdated `android-restore.zip`; reinstalling
-  (erases the card) backs up the new ones. A refresh without reinstalling is
-  planned.
+- **After an Android update without the Magisk module**, `android-restore.zip`
+  holds the *old* Android boot images: install the zip from Magisk and keep
+  the card to refresh it.
 - Fingerprint enrolment works, but GNOME Settings does not show its progress
   (about 17 touches).
 - XWayland (X11) apps do not open the keyboard on tap: use the floating
@@ -173,9 +191,9 @@ zips ([installer/](installer)).
 
 ## Documentation
 
-- [INSTALL.md](docs/gts9wifi/INSTALL.md) — installing, also without the recovery zip
+- [INSTALL.md](docs/gts9wifi/INSTALL.md) — installing, step by step
 - [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md) — how switching works, and how to recover
-- [installer/README.md](installer/README.md) — the recovery zips, and testing them without a tablet
+- [installer/README.md](installer/README.md) — the installer zip, the Magisk module, the switch zips, and testing them without a tablet
 - [BUILDING.md](docs/gts9wifi/BUILDING.md) — building every image from source
 - [KNOWN-ISSUES.md](docs/gts9wifi/KNOWN-ISSUES.md) — open issues and the work queue
 - [PORTING-LOG.md](docs/gts9wifi/PORTING-LOG.md) — what was done, in order, including mistakes
@@ -209,6 +227,8 @@ This port would not exist without the work of:
 - **[rainbowdashh](https://github.com/rainbowdashh/android_device_samsung_gts9wifi)** —
   the gts9wifi TWRP device tree and partition map.
 - **osm0sis** — AnyKernel3, the model for the recovery zips' loader layout.
+- **topjohnwu** — Magisk and its module format; the **KernelSU** project for
+  the module WebUI API.
 - The mainline Linux Qualcomm (linux-arm-msm), Mesa Freedreno/Turnip,
   libcamera, postmarketOS (hexagonrpcd, libssc) and Ubuntu communities.
 

@@ -79,6 +79,10 @@ python3 scripts/verify-gts9wifi-bundle.py ../build/gts9wifi-bundle ../build/gts9
 
 # 5. microSD image (+ .zst and SHA256SUMS)
 sudo bash scripts/build-gts9wifi-sd-image.sh
+
+# 6. installer zip (recovery zip + Magisk module): loader, then the zip
+bash scripts/build-gts9wifi-recovery-loader.sh
+bash scripts/build-gts9wifi-installer-zip.sh v0.2.0-<version>
 ```
 
 Outputs:
@@ -90,6 +94,7 @@ Outputs:
 | sensor packages | `build/gts9wifi-ultra/out/packages/{libssc,hexagonrpcd,iio-sensor-proxy}_*.deb` |
 | bundle | `build/gts9wifi-bundle/{boot,init_boot,vendor_boot,dtbo}.img`, `SHA256SUMS` |
 | SD image | `build/gts9wifi-sd.img`, `.zst`, `.SHA256SUMS` |
+| installer | `build/gts9wifi-installer/ubuntu-gts9wifi-<version>-installer.zip`, `.sha256` (test it without a tablet: [installer/README.md](../../installer/README.md)) |
 
 None of these scripts write to a tablet or to any real block device.
 

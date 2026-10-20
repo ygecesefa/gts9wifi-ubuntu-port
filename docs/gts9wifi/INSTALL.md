@@ -1,88 +1,68 @@
 # Installing Ubuntu on the gts9wifi (microSD)
 
-> Alpha. Read [DUALBOOT.md](DUALBOOT.md) completely before starting.
+> Alpha. Read [DUALBOOT.md](DUALBOOT.md) before starting.
+
+Everything is done by one zip, `ubuntu-gts9wifi-<version>-installer.zip`
+(the only release asset you need), from recovery or from the Magisk app. The
+steps are in the [README](../../README.md#install); this page adds the
+details.
 
 ## You need
 
 - Galaxy Tab S9 Wi-Fi **SM-X710** (`gts9wifi`) with an **unlocked bootloader**
-  and **root** (Magisk) on Android
-- a microSD card, 16 GB or larger (its contents will be erased)
-- a Linux PC with `adb`, `zstd` and `sha256sum`
-- the release assets: `ubuntu-gts9wifi-<version>-sd.img.zst`,
-  `boot.img`, `init_boot.img`, `vendor_boot.img`, `dtbo.img`, `SHA256SUMS`,
-  `to-ubuntu.sh`
+- a microSD card, 16 GB or larger (it is erased). Not a card adopted as
+  internal storage: the installer refuses those.
+- one of:
+  - a custom recovery (TWRP or LineageOS recovery) and a PC with `adb`, or
+  - Magisk on Android (28+ for the action button) and about 5 GB free
+    internal storage (the Magisk app copies the 1.7 GB zip, and the installer
+    stages the image next to it)
 
-Check the downloads:
+Check the download: `sha256sum -c ubuntu-gts9wifi-<version>-installer.zip.sha256`
 
-```sh
-sha256sum -c SHA256SUMS
-```
+## Before the first install
 
-## 1. Back up the Android boot set
+Optional but recommended: a full copy of the device-unique partitions on your
+PC (*Backups to take before the first install* in [DUALBOOT.md](DUALBOOT.md)).
+The installer itself backs up the four boot partitions it overwrites, to the
+card (`android-restore.zip`).
 
-Follow *Backups to take before the first install* in [DUALBOOT.md](DUALBOOT.md).
-Do not continue without a verified copy of `boot`, `init_boot`,
-`vendor_boot` and `dtbo` on your PC.
+Test the way back once while Android still works: recovery → *Advanced →
+Enter fastboot*, `fastboot devices` on the PC, `fastboot reboot`.
 
-## 2. Write the microSD card
+## From recovery
 
-### From the PC (card in a card reader)
+1. Insert the card. *Volume Up + Power* → recovery.
+2. LineageOS recovery: *Apply update → Apply from ADB*. TWRP: *Advanced → ADB
+   Sideload*.
+3. PC: `adb sideload ubuntu-gts9wifi-<version>-installer.zip`
+4. Answer the erase question with **Volume Up**; reboot when it says DONE.
 
-```sh
-lsblk -o NAME,SIZE,MODEL,TRAN      # identify the card — e.g. /dev/sdX, ~15 GB, usb
-zstd -dc ubuntu-gts9wifi-<version>-sd.img.zst | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
-```
+Do not install the zip from the microSD itself: the card is erased during
+the install. TWRP's sideload screen may show no log; the zip still runs (adb
+on the PC shows the progress).
 
-### Or with the card inside the tablet (Android, root)
+For the fingerprint reader, afterwards in Android: install the same zip from
+the Magisk app once and answer **Volume Up = keep** (see below).
 
-First unmount it in Android (*Settings → Storage → SD card → Unmount*), then
-confirm it is `mmcblk1` and roughly the size of your card:
+## From the Magisk app
 
-```sh
-adb shell su -c 'cat /proc/partitions' | grep -E 'mmcblk1$|sda$'
-zstd -dc ubuntu-gts9wifi-<version>-sd.img.zst | adb exec-in su -c 'dd of=/dev/block/mmcblk1 bs=4M'
-adb shell su -c 'sync; blkid /dev/block/mmcblk1p1 /dev/block/mmcblk1p2'
-```
+1. Insert the card. Magisk → *Modules* → *Install from storage* → the zip.
+2. Answer the questions with the volume keys (Volume Up = yes).
+3. Reboot: Ubuntu starts.
 
-You must see the labels `GTS9W_BOOT` and `GTS9W_ROOT`. **Never** use `sda` here:
-it is the internal storage.
+The installer then also copies the fingerprint calibration to the card and
+leaves the Magisk module, the Android → Ubuntu switch, installed.
 
-## 3. Copy the Ubuntu boot images to Android
+If the card already holds Ubuntu, the first question is whether to **keep**
+it: Volume Up keeps the card as it is and only refreshes the Android backup,
+copies the calibration and installs the module (nothing is erased and the
+boot partitions are not written). Volume Down goes on to the full install.
 
-```sh
-adb shell mkdir -p /sdcard/Ubuntu/images
-adb push boot.img init_boot.img vendor_boot.img dtbo.img SHA256SUMS /sdcard/Ubuntu/images/
-adb push to-ubuntu.sh /data/local/tmp/
-```
+## First login
 
-## 4. Switch to Ubuntu
-
-```sh
-adb shell
-su
-sh /data/local/tmp/to-ubuntu.sh       # type UBUNTU when asked
-```
-
-The tablet reboots into Ubuntu. The first boot expands the root partition to
-the whole card and can take a few minutes.
-
-Optional one-tap switch from the Android home screen, with
-[Termux](https://f-droid.org/packages/com.termux/) and
-[Termux:Widget](https://f-droid.org/packages/com.termux.widget/):
-
-```sh
-# inside Termux
-mkdir -p ~/.shortcuts
-printf '#!/data/data/com.termux/files/usr/bin/bash\nsu -c "sh /data/local/tmp/to-ubuntu.sh"\n' > ~/.shortcuts/Ubuntu.sh
-chmod +x ~/.shortcuts/Ubuntu.sh
-```
-
-Add the Termux:Widget widget to the home screen and tap **Ubuntu.sh**.
-
-## 5. First login
-
-Alpha images ship a test account: user `ubuntu`, password given in the release
-notes. You are asked to change it on first login.
+User `ubuntu`, password `ubuntu`; change it with `passwd`. The first boot
+grows the root partition to the whole card and can take a few minutes.
 
 With USB connected, the tablet also offers a USB network (`usb0`,
 `172.16.42.1`). From the PC:
@@ -92,7 +72,7 @@ sudo ip addr add 172.16.42.2/24 dev <usb-interface>
 ssh ubuntu@172.16.42.1
 ```
 
-## 6. Back to Android
+## Switching, and the way back
 
-Run **Android'e Geç** from the app grid, or `sudo ubuntu-to-android`.
-See [DUALBOOT.md](DUALBOOT.md) for the recovery paths if Ubuntu does not boot.
+See [DUALBOOT.md](DUALBOOT.md): *Switch to Android* in Ubuntu, the Magisk
+module in Android, and the two switch zips on the card for recovery.

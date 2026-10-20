@@ -6,7 +6,8 @@
 #       images, read from its partitions and zipped ON THE TABLET by the
 #       Ubuntu installer just before Ubuntu was written
 #   ubuntu-boot.zip      (GTS9W_SET=ubuntu)   the Ubuntu boot images of the
-#       image on this card, built with it (scripts/build-gts9wifi-ubuntu-boot-zip.sh)
+#       image on this card, zipped on the tablet by the installer from its own
+#       copy of the boot set
 #
 # Either one writes its four images to boot, init_boot, vendor_boot and dtbo
 # (nothing else) and reads them back.  No root and no Android version

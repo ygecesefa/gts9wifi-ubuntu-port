@@ -1,37 +1,54 @@
 #!/sbin/sh
 # Ubuntu installer zip for the Galaxy Tab S9 Wi-Fi (SM-X710, gts9wifi).
-# Runs in any recovery (LineageOS recovery, TWRP), started by the zip's
-# update-binary loader (installer/update-binary.sh) with the same arguments:
+# One zip, two ways in:
+#   recovery (LineageOS recovery, TWRP: adb sideload): started by the zip's
+#       update-binary loader (installer/update-binary.sh)
+#   Android (Magisk app, as a module): started by the zip's customize.sh
+#       (installer/magisk/customize.sh), GTS9W_MODE=android
 #   install.sh <api> <OUTFD> <ZIPFILE>
-# The loader provides GTS9W_TOOL (gts9w-tool) and GTS9W_LOADER (itself).
+# The caller provides GTS9W_TOOL (gts9w-tool) and GTS9W_LOADER (the loader
+# with the tool appended, reused for the two switch zips).
 #
 # Order, chosen so that a failure at any step leaves a bootable Android:
-#   1. checks: device, microSD (/dev/block/mmcblk1 only), boot partitions,
-#      space in /tmp; stage the payload in /tmp and verify every sha256
+#   1. checks: device, microSD (/dev/block/mmcblk1 only, not adopted as
+#      internal storage), boot partitions, free space; stage the payload and
+#      verify every sha256
 #   2. Android backup: read this tablet's own boot, init_boot, vendor_boot and
-#      dtbo, and build android-restore.zip from them (an Ubuntu set already
-#      in the partitions is detected and never "backed up")
+#      dtbo, whatever Android version it runs, and build android-restore.zip
+#      from them (an Ubuntu set already in the partitions is detected and
+#      never "backed up")
 #   3. ask: the microSD will be erased (Volume Up = yes, Volume Down = no)
 #   4. write the Ubuntu microSD image, read it back
-#   5. put android-restore.zip and the unpacked images on the card's FAT
-#      partition GTS9W_BACK, next to ubuntu-boot.zip (already in the image); Ubuntu itself takes them into its "Switch to
-#      Android" set at boot (gts9wifi-import-backup).  Recovery never writes
-#      Ubuntu's root filesystem.
+#   5. build ubuntu-boot.zip from this zip's Ubuntu boot images and put both
+#      switch zips on the card's FAT partition GTS9W_BACK; in Android also the
+#      fingerprint sensor's calibration (only readable there), which Ubuntu
+#      installs at boot (gts9wifi-import-backup).  Ubuntu's root filesystem
+#      is never written.
 #   6. only now write the four Ubuntu boot images, read them back
 # Android's userdata, super, vbmeta and everything else are never written.
 #
+# In Android, a card that already holds Ubuntu can be kept: then only the
+# Android backup and the calibration are refreshed (and the Magisk module is
+# installed); boot partitions and the card's Ubuntu stay as they are.
 set -u
 
 OUTFD=$2
 ZIPFILE=$3
-W=/tmp/gts9w
-TOOL=${GTS9W_TOOL:?started by update-binary}
-LOADER=${GTS9W_LOADER:?started by update-binary}
+MODE=${GTS9W_MODE:-recovery}
+TOOL=${GTS9W_TOOL:?started by update-binary or customize.sh}
+LOADER=${GTS9W_LOADER:?started by update-binary or customize.sh}
 BB=/dev/block/by-name
 SD=/dev/block/mmcblk1
 P=gts9wifi
+FP_SRC=/data/vendor/biometrics/meta
+if [ $MODE = android ]; then
+	W=/data/local/tmp/gts9w
+	ui() { echo "$*"; }
+else
+	W=/tmp/gts9w
+	ui() { printf 'ui_print %s\nui_print\n' "$*" >> /proc/self/fd/$OUTFD; }
+fi
 
-ui() { printf 'ui_print %s\nui_print\n' "$*" >> /proc/self/fd/$OUTFD; }
 fail() {
 	ui ""
 	ui "ERROR: $*"
@@ -63,12 +80,63 @@ ask() {
 	$TOOL keys 60
 	[ $? = 0 ]
 }
+# Before the card is erased.  Android's vold mounts the card's FAT itself
+# (shown as /dev/block/vold/public:179,N): ask it to let go.
+release_sd() {
+	if [ $MODE = android ]; then
+		for v in $(sm list-volumes public 2>/dev/null | grep -o 'public:179,[0-9]*'); do
+			sm unmount $v
+		done
+		i=0
+		while grep -q '^/dev/block/vold/public:179,' /proc/mounts && [ $i -lt 20 ]; do
+			sleep 0.5; i=$((i + 1))
+		done
+		grep -q '^/dev/block/vold/public:179,' /proc/mounts && fail "Android did not release the SD card"
+	fi
+	for m in $(grep "^$SD" /proc/mounts | cut -d' ' -f2); do
+		umount "$m" || fail "Could not unmount the SD card: $m"
+	done
+}
+# GTS9W_BACK at $W/back.  After the card was written, Android's vold finds
+# the new FAT partition, checks it (fsck) and mounts it: wait for that, so
+# nothing writes during its fsck.  Mounting the same partition again shares
+# the filesystem with vold's mount.
+mount_back() {
+	if [ $MODE = android ]; then
+		i=0
+		while ! grep -q '^/dev/block/vold/public:179,' /proc/mounts && [ $i -lt 30 ]; do
+			sleep 0.5; i=$((i + 1))
+		done
+	fi
+	mkdir -p $W/back
+	mount -t vfat ${SD}p1 $W/back || fail "Could not mount GTS9W_BACK"
+}
+card_has_ubuntu() {
+	[ -b ${SD}p3 ] && head -c 1160 ${SD}p3 | tail -c 16 | grep -a -q GTS9W_ROOT
+}
+# Copy one file onto GTS9W_BACK and check it there.
+put() {
+	cp "$1" "$2.new" && sync && [ "$(sha "$2.new")" = "$(sha "$1")" ] && mv "$2.new" "$2" ||
+		fail "Could not write $(basename "$2") to the SD card"
+}
+# The calibration lives only in Android's /data/vendor (encrypted for a
+# recovery); Ubuntu's gts9wifi-import-backup installs it from the card.
+copy_fingerprint() {
+	[ $MODE = android ] || return 0
+	[ -f $FP_SRC/calib.dat ] && [ -f $FP_SRC/egoptbds.dat ] || {
+		ui "No fingerprint calibration in Android ($FP_SRC); skipped."; return 0; }
+	mkdir -p $W/back/fingerprint
+	for f in calib.dat egoptbds.dat; do put $FP_SRC/$f $W/back/fingerprint/$f; done
+	(cd $FP_SRC && sha256sum calib.dat egoptbds.dat) > $W/fp.sums
+	put $W/fp.sums $W/back/fingerprint/SHA256SUMS
+	ui "Fingerprint calibration copied to the SD card."
+}
 
 rm -rf $W
 mkdir -p $W/pay $W/android
 ui "=============================================="
 ui " Ubuntu 24.04 - Galaxy Tab S9 Wi-Fi (SM-X710)"
-ui " microSD installer"
+if [ $MODE = android ]; then ui " microSD installer (Magisk)"; else ui " microSD installer"; fi
 ui "=============================================="
 
 # ---- 1. checks ----------------------------------------------------------
@@ -80,6 +148,9 @@ esac
 
 [ -b $SD ] || fail "No microSD card found ($SD)"
 [ "$(cat /sys/block/mmcblk1/device/type 2>/dev/null)" = SD ] || fail "$SD is not an SD card"
+# A card adopted as internal storage holds Android apps and data.
+grep -qs 'PARTNAME=android_expand' /sys/block/mmcblk1/mmcblk1p*/uevent &&
+	fail "This SD card is used as Android internal storage; nothing was written"
 for name in boot init_boot vendor_boot dtbo; do
 	part=$BB/$name
 	[ -e $part ] || fail "Missing partition: $part"
@@ -90,14 +161,26 @@ for name in boot init_boot vendor_boot dtbo; do
 	[ "$(blockdev --getsize64 $part)" = "$(size_of $name)" ] || fail "Unexpected size of the $name partition"
 done
 
-ui "Copying the package to /tmp and verifying it..."
-free_kb=$(df -k /tmp | tail -1 | tr -s ' ' | cut -d' ' -f4)
-[ "${free_kb:-0}" -gt 2500000 ] || fail "Not enough space in /tmp (${free_kb} KB)"
-for f in SHA256SUMS sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img \
-	restore.sh version.txt; do
+keep=0
+if [ $MODE = android ] && card_has_ubuntu; then
+	ask "Ubuntu is already on this SD card." \
+		"YES: keep it; only install the Magisk module" \
+		"     and refresh the Android backup on the card." \
+		"NO:  erase the card and install Ubuntu again." && keep=1
+fi
+
+if [ $keep = 0 ]; then
+	ui "Copying the package to $(dirname $W) and verifying it..."
+	free_kb=$(df -k $(dirname $W) | tail -1 | tr -s ' ' | cut -d' ' -f4)
+	[ "${free_kb:-0}" -gt 2500000 ] || fail "Not enough space in $(dirname $W) (${free_kb} KB)"
+	files="sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img restore.sh"
+else
+	files="restore.sh"
+fi
+for f in SHA256SUMS version.txt $files; do
 	$TOOL extract "$ZIPFILE" $P/$f $W/pay/$f || fail "Could not extract from the zip: $f"
 done
-for f in sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img restore.sh; do
+for f in $files; do
 	[ "$(sha $W/pay/$f)" = "$(want $f $W/pay/SHA256SUMS)" ] || fail "sha256 mismatch: $f"
 done
 raw_size=$(grep '^raw_size ' $W/pay/SHA256SUMS | cut -d' ' -f2)
@@ -112,29 +195,41 @@ ui "Package OK: $(cat $W/pay/version.txt)"
 # ---- 2. Android backup ----------------------------------------------------
 is_ubuntu_set() {
 	head -c 4096 $BB/vendor_boot | grep -a -q GTS9W_ROOT && return 0
+	[ $keep = 0 ] &&
 	[ "$(head -c 100663296 $BB/boot | sha256sum | cut -d' ' -f1)" = "$(want boot.img $W/pay/SHA256SUMS)" ]
 }
 
+# Take a verified set from directory $1 (four images + SHA256SUMS).
+take_set() {
+	[ -f $1/SHA256SUMS ] || return 1
+	for name in boot init_boot vendor_boot dtbo; do
+		[ -f $1/$name.img ] && [ "$(sha $1/$name.img)" = "$(want $name.img $1/SHA256SUMS)" ] || return 1
+	done
+	for name in boot init_boot vendor_boot dtbo; do cp $1/$name.img $W/android/; done
+}
+
 # An Ubuntu set is already installed: the Android images can only come from
-# an earlier backup on this card (GTS9W_BACK, or Ubuntu's own restore set).
+# an earlier backup on this card (GTS9W_BACK/android-restore.zip, or older
+# layouts: GTS9W_BACK/android/, Ubuntu's own restore set).
 rescue_backup() {
-	mkdir -p $W/old
+	mkdir -p $W/old $W/rescue/android
 	for p in $SD"p"*; do
 		[ -b "$p" ] || continue
 		for fs in vfat ext4; do
 			mount -t $fs -o ro "$p" $W/old 2>/dev/null || continue
-			for d in $W/old/android $W/old/usr/share/gts9wifi-dualboot/android; do
-				[ -f $d/SHA256SUMS ] || continue
-				ok=1
-				for name in boot init_boot vendor_boot dtbo; do
-					[ -f $d/$name.img ] &&
-					[ "$(sha $d/$name.img)" = "$(want $name.img $d/SHA256SUMS)" ] || ok=0
+			if [ -f $W/old/android-restore.zip ]; then
+				for f in SHA256SUMS boot.img init_boot.img vendor_boot.img dtbo.img; do
+					$TOOL extract $W/old/android-restore.zip android/$f $W/rescue/android/$f 2>/dev/null
 				done
-				if [ $ok = 1 ]; then
-					for name in boot init_boot vendor_boot dtbo; do
-						cp $d/$name.img $W/android/
-					done
-					umount $W/old
+				if take_set $W/rescue/android; then
+					umount $W/old; rm -rf $W/rescue
+					ui "Found an earlier Android backup: $p android-restore.zip"
+					return 0
+				fi
+			fi
+			for d in $W/old/android $W/old/usr/share/gts9wifi-dualboot/android; do
+				if take_set $d; then
+					umount $W/old; rm -rf $W/rescue
 					ui "Found an earlier Android backup: $p"
 					return 0
 				fi
@@ -142,6 +237,7 @@ rescue_backup() {
 			umount $W/old
 		done
 	done
+	rm -rf $W/rescue
 	return 1
 }
 
@@ -161,42 +257,63 @@ if is_ubuntu_set; then
 else
 	for name in boot init_boot vendor_boot dtbo; do
 		head -c $(size_of $name) $BB/$name > $W/android/$name.img
-		[ "$(stat -c %s $W/android/$name.img)" = "$(size_of $name)" ] || fail "$name okunamadi"
+		[ "$(stat -c %s $W/android/$name.img)" = "$(size_of $name)" ] || fail "Could not read $name"
 	done
 	backup=partitions
 fi
+
+# Build a switch zip: $1 output, $2 set (android|ubuntu), $3 directory with
+# the four images, SHA256SUMS and info.txt.  Same loader as this zip (with
+# gts9w-tool); restore.sh does the work.
+make_switch_zip() {
+	printf '# gts9wifi %s boot set: see %s/restore.sh (run by update-binary)\n' $2 $2 > $W/updater-script
+	$TOOL zip -0 $1 \
+		META-INF/com/google/android/update-binary=$LOADER \
+		META-INF/com/google/android/updater-script=$W/updater-script \
+		$2/restore.sh=$W/pay/restore.sh \
+		$2/boot.img=$3/boot.img \
+		$2/init_boot.img=$3/init_boot.img \
+		$2/vendor_boot.img=$3/vendor_boot.img \
+		$2/dtbo.img=$3/dtbo.img \
+		$2/SHA256SUMS=$3/SHA256SUMS \
+		$2/info.txt=$3/info.txt || fail "Could not create $(basename $1)"
+	# Read the images back out of the new zip.
+	for name in boot init_boot vendor_boot dtbo; do
+		$TOOL extract $1 $2/$name.img $W/check.img &&
+		[ "$(sha $W/check.img)" = "$(want $name.img $3/SHA256SUMS)" ] ||
+			fail "$(basename $1) did not verify ($name)"
+	done
+	rm -f $W/check.img
+}
 
 if [ $backup != none ]; then
 	(cd $W/android && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img > SHA256SUMS)
 	for name in boot init_boot vendor_boot dtbo; do
 		ui "  $name  $(want $name.img $W/android/SHA256SUMS | cut -c1-16)"
 	done
-	# Same loader as this zip (with gts9w-tool); restore.sh does the work.
-	printf '# gts9wifi Android boot-set restore: see android/restore.sh\n' > $W/updater-script
 	{
 		echo "Android boot images of this tablet, saved $(date -u +%Y-%m-%dT%H:%MZ)"
 		echo "by the gts9wifi Ubuntu installer ($(cat $W/pay/version.txt))."
 		echo "source: $backup"
 		echo "device: $dev  build: $(getprop ro.build.fingerprint)"
 	} > $W/android/info.txt
-	$TOOL zip -0 $W/android-restore.zip \
-		META-INF/com/google/android/update-binary=$LOADER \
-		META-INF/com/google/android/updater-script=$W/updater-script \
-		android/restore.sh=$W/pay/restore.sh \
-		android/boot.img=$W/android/boot.img \
-		android/init_boot.img=$W/android/init_boot.img \
-		android/vendor_boot.img=$W/android/vendor_boot.img \
-		android/dtbo.img=$W/android/dtbo.img \
-		android/SHA256SUMS=$W/android/SHA256SUMS \
-		android/info.txt=$W/android/info.txt || fail "Could not create android-restore.zip"
-	# Read the images back out of the new zip before anything is erased.
-	for name in boot init_boot vendor_boot dtbo; do
-		$TOOL extract $W/android-restore.zip android/$name.img $W/check.img &&
-		[ "$(sha $W/check.img)" = "$(want $name.img $W/android/SHA256SUMS)" ] ||
-			fail "android-restore.zip did not verify ($name)"
-	done
-	rm -f $W/check.img
+	make_switch_zip $W/android-restore.zip android $W/android
 	ui "android-restore.zip created and verified."
+fi
+
+if [ $keep = 1 ]; then
+	mount_back
+	[ $backup != none ] && put $W/android-restore.zip $W/back/android-restore.zip
+	copy_fingerprint
+	umount $W/back
+	ui ""
+	ui "=============================================="
+	ui " DONE. Ubuntu on the SD card was kept."
+	ui " Switch to Ubuntu with the Magisk module"
+	ui " (action button or WebUI), after a reboot."
+	ui "=============================================="
+	cleanup
+	exit 0
 fi
 
 # ---- 3. confirm ------------------------------------------------------------
@@ -206,9 +323,7 @@ ask "WARNING: EVERYTHING on the microSD card" \
 	"Continue?" || fail "Cancelled; nothing was written"
 
 # ---- 4. microSD ------------------------------------------------------------
-for m in $(grep "^$SD" /proc/mounts | cut -d' ' -f2); do
-	umount "$m" || fail "Could not unmount the SD card: $m"
-done
+release_sd
 ui ""
 ui "Writing Ubuntu to the SD card (a few minutes)..."
 { $TOOL unzstd $W/pay/sd.img.zst $SD; echo "rc $?"; } | while read pct rc; do
@@ -226,25 +341,26 @@ while [ ! -b ${SD}p3 ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
 [ -b ${SD}p1 ] && [ -b ${SD}p3 ] || fail "SD partitions did not appear; boot partitions NOT changed"
 ui "SD card OK."
 
-# ---- 5. backups onto the card ----------------------------------------------
-if [ $backup != none ]; then
-	mkdir -p $W/back
-	mount -t vfat ${SD}p1 $W/back || fail "Could not mount GTS9W_BACK"
-	mkdir -p $W/back/android
-	cp $W/android-restore.zip $W/back/ &&
-	cp $W/android/*.img $W/android/SHA256SUMS $W/android/info.txt $W/back/android/ ||
-		fail "Could not write the backup to the SD card"
-	sync
-	[ "$(sha $W/back/android-restore.zip)" = "$(sha $W/android-restore.zip)" ] ||
-		fail "android-restore.zip on the SD card did not verify"
-	for name in boot init_boot vendor_boot dtbo; do
-		[ "$(sha $W/back/android/$name.img)" = "$(want $name.img $W/android/SHA256SUMS)" ] ||
-			fail "android/$name.img on the SD card did not verify"
-	done
-	umount $W/back
-	ui "Android backup written to the SD card (GTS9W_BACK)."
-	ui "Ubuntu takes it for 'Switch to Android' at first boot."
-fi
+# ---- 5. switch zips onto the card -----------------------------------------
+mkdir -p $W/ubuntu
+for name in boot init_boot vendor_boot dtbo; do
+	ln -s $W/pay/$name.img $W/ubuntu/$name.img
+done
+grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' $W/pay/SHA256SUMS > $W/ubuntu/SHA256SUMS
+{
+	echo "Ubuntu boot images, gts9wifi port $(cat $W/pay/version.txt)."
+	echo "They boot the Ubuntu microSD this zip was made with (root=LABEL=GTS9W_ROOT)."
+} > $W/ubuntu/info.txt
+make_switch_zip $W/ubuntu-boot.zip ubuntu $W/ubuntu
+ui "ubuntu-boot.zip created and verified."
+
+mount_back
+put $W/ubuntu-boot.zip $W/back/ubuntu-boot.zip
+rm -f $W/ubuntu-boot.zip
+[ $backup != none ] && put $W/android-restore.zip $W/back/android-restore.zip
+copy_fingerprint
+umount $W/back
+ui "Switch zips written to the SD card (GTS9W_BACK)."
 
 # ---- 6. Ubuntu boot images ---------------------------------------------------
 ui ""
@@ -268,18 +384,20 @@ ui "=============================================="
 ui " DONE. Reboot: Ubuntu will start."
 ui " User: ubuntu   Password: ubuntu"
 ui ""
-if [ $backup != none ]; then
-	ui " Two switch zips are on the SD card (GTS9W_BACK):"
-	ui "   android-restore.zip  -> back to Android"
-	ui "   ubuntu-boot.zip      -> back to Ubuntu"
-	ui " Flash either one in recovery; no root needed."
-	ui " (In Ubuntu: 'Switch to Android' in the dock.)"
+ui " Switch zips on the SD card (GTS9W_BACK),"
+ui " flash in recovery, no root needed:"
+[ $backup != none ] && ui "   android-restore.zip  -> Android"
+ui "   ubuntu-boot.zip      -> Ubuntu"
+[ $backup = none ] && ui " WARNING: no Android backup was taken."
+ui " In Ubuntu: 'Switch to Android' in the dock."
+if [ $MODE = android ]; then
+	ui " In Android: the Magisk module (action button / WebUI)."
 else
-	ui " WARNING: no Android backup was taken."
+	ui ""
+	ui " Fingerprint reader: in Android, install this"
+	ui " zip once from the Magisk app and keep the card"
+	ui " (the calibration can only be read there)."
 fi
-ui ""
-ui " For the fingerprint reader, switch once from"
-ui " Android with to-ubuntu.sh (calibration is in Android)."
 ui "=============================================="
 cleanup
 exit 0

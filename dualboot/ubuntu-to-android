@@ -1,13 +1,22 @@
 #!/usr/bin/bash
 # Ubuntu -> Android on the Galaxy Tab S9 Wi-Fi (gts9wifi, SM-X710).
 #
-# Adapted from the Fedora gts9wifi port's astroid-to-android.  Restores the
-# Android boot, init_boot, vendor_boot and dtbo images saved before Ubuntu was
-# installed, verifies them, then reboots.  vbmeta is never touched.
+# Adapted from the Fedora gts9wifi port's astroid-to-android.  Writes this
+# tablet's own Android boot, init_boot, vendor_boot and dtbo images back,
+# verifies them, then reboots.  vbmeta is never touched.
+#
+# The images are the switch zip on the microSD's FAT partition GTS9W_BACK,
+# the same file a recovery flashes:
+#   1. GTS9W_BACK/android-restore.zip  made by the installer zip, kept current
+#      by the Magisk module after Android updates
+#   2. GTS9W_BACK/android/              older card layout
+#   3. /usr/share/gts9wifi-dualboot/android   older images (copied at boot) or
+#      a personal image (ANDROID_BACKUP_DIR in build-gts9wifi-rootfs.sh)
 set -Eeuo pipefail
 
-BASE="/usr/share/gts9wifi-dualboot/android"
 PARTS="/dev/disk/by-partlabel"
+BACK_DEV="/dev/disk/by-label/GTS9W_BACK"
+LOCAL="/usr/share/gts9wifi-dualboot/android"
 
 declare -A EXPECTED=(
   [boot]=100663296
@@ -18,10 +27,46 @@ declare -A EXPECTED=(
 
 echo "Ubuntu -> Android (gts9wifi)"
 [[ $EUID -eq 0 ]] || { echo "Error: root needed."; exit 1; }
-[[ -f "$BASE/SHA256SUMS" ]] || {
-    echo "No Android backup of this tablet ($BASE is empty)."
-    echo "The installer zip puts it on the SD card's GTS9W_BACK partition; Ubuntu takes it at boot."
-    echo "Back to Android: flash GTS9W_BACK/android-restore.zip in recovery, or fastboot from a PC."
+
+tmp=$(mktemp -d /run/gts9w-android.XXXXXX)
+cleanup() {
+    mountpoint -q "$tmp/back" && umount "$tmp/back"
+    rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+# A set is usable when all four images match its SHA256SUMS.
+set_ok() {
+    [[ -f "$1/SHA256SUMS" ]] || return 1
+    for name in boot init_boot vendor_boot dtbo; do
+        [[ -f "$1/$name.img" ]] || return 1
+    done
+    (cd "$1" && grep -E ' (boot|init_boot|vendor_boot|dtbo)\.img$' SHA256SUMS | sha256sum -c --quiet -) >/dev/null 2>&1
+}
+
+BASE=""
+if [[ -e "$BACK_DEV" ]]; then
+    mkdir "$tmp/back" "$tmp/set"
+    mount -t vfat -o ro,nosuid,nodev,noexec "$BACK_DEV" "$tmp/back"
+    if [[ -f "$tmp/back/android-restore.zip" ]] &&
+        python3 -c 'import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+for n in ("SHA256SUMS", "boot.img", "init_boot.img", "vendor_boot.img", "dtbo.img"):
+    open(sys.argv[2] + "/" + n, "wb").write(z.read("android/" + n))' \
+            "$tmp/back/android-restore.zip" "$tmp/set" && set_ok "$tmp/set"; then
+        BASE="$tmp/set"; echo "Images: GTS9W_BACK/android-restore.zip"
+    elif set_ok "$tmp/back/android"; then
+        cp "$tmp/back/android/"{boot,init_boot,vendor_boot,dtbo}.img "$tmp/back/android/SHA256SUMS" "$tmp/set/"
+        BASE="$tmp/set"; echo "Images: GTS9W_BACK/android/"
+    fi
+    umount "$tmp/back"
+fi
+if [[ -z "$BASE" ]] && set_ok "$LOCAL"; then
+    BASE="$LOCAL"; echo "Images: $LOCAL"
+fi
+[[ -n "$BASE" ]] || {
+    echo "No Android backup of this tablet on the SD card (GTS9W_BACK/android-restore.zip)."
+    echo "Back to Android: flash android-restore.zip in recovery, or fastboot from a PC."
     exit 1; }
 
 for name in boot init_boot vendor_boot dtbo; do
