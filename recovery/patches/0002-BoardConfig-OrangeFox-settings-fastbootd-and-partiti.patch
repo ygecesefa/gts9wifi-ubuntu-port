@@ -1,4 +1,4 @@
-From 42a7fa7ebad8aac620dd65b569158d876632608f Mon Sep 17 00:00:00 2001
+From b438f45843f5b9bda63fb1cee183ba85de5722b7 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Wed, 21 Oct 2026 21:35:28 +0300
 Subject: [PATCH 2/2] BoardConfig: OrangeFox settings, fastbootd and partition
@@ -8,18 +8,19 @@ Subject: [PATCH 2/2] BoardConfig: OrangeFox settings, fastbootd and partition
   fastbootd in recovery; the bootloader has none).
 - lptools/lpdump, repacktools, resetprop (as in dmXq-twrp-development's
   sm8550-common tree).
+- TW_MAX_BRIGHTNESS (OrangeFox refuses to build without it).
 - OrangeFox: screen geometry for the rotated 2560x1600 panel, no
   flashlight/LED, and skip /data decryption, which this build does not
   include yet.
 ---
- BoardConfig.mk | 27 +++++++++++++++++++++++++++
- 1 file changed, 27 insertions(+)
+ BoardConfig.mk | 32 ++++++++++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
 
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 5cc434f..27389ef 100644
+index 5cc434f..1b14eca 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -126,3 +126,30 @@ TW_EXCLUDE_APEX := true
+@@ -126,3 +126,35 @@ TW_EXCLUDE_APEX := true
  TARGET_USES_LOGD := true
  TWRP_INCLUDE_LOGCAT := true
  TW_HAS_DOWNLOAD_MODE := true
@@ -35,6 +36,11 @@ index 5cc434f..27389ef 100644
 +TW_INCLUDE_REPACKTOOLS := true
 +TW_INCLUDE_RESETPROP := true
 +TW_INCLUDE_LIBRESETPROP := true
++
++# Backlight (panel0-backlight, already set above): OrangeFox requires a
++# maximum. 255 is safe on any range; it only caps the slider.
++TW_MAX_BRIGHTNESS := 255
++TW_DEFAULT_BRIGHTNESS := 160
 +
 +# OrangeFox
 +OF_MAINTAINER := ygecesefa
