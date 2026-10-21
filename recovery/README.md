@@ -21,8 +21,9 @@ workflow in GitHub Actions:
 | 0002 | BoardConfig: fastbootd stated explicitly, lptools/lpdump, repacktools, resetprop; OrangeFox screen geometry for the rotated 2560×1600 panel |
 | 0003 | microSD not wipeable from the Wipe list: TWRP enables that for `/external_sd` in code, so `twrp.flags` says `wipeingui=0` |
 | 0004 | `/data` decryption: KeyMint, qseecomd, gatekeeper and their libraries from **this tablet's own vendor** (X710XXU4BXHB, so they match its TrustZone apps), the tablet's vintf manifest, an init file that starts KeyMint, TWRP FBE + metadata decryption with Qualcomm wrapped keys, `device/qcom/twrp-common` |
+| 0005 | the libraries qseecomd loads with `dlopen` (RPMB, SSD, GPT… listeners), which a readelf closure misses: without them qseecomd stops at `RPMB_INIT failed` |
 
-The vendor binaries in 0004 are Samsung/Qualcomm files, carried as other
+The vendor binaries in 0004–0005 are Samsung/Qualcomm files, carried as other
 TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
 ## Status
