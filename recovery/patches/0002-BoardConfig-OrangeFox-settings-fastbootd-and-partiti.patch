@@ -1,4 +1,4 @@
-From b438f45843f5b9bda63fb1cee183ba85de5722b7 Mon Sep 17 00:00:00 2001
+From 85e8aab45a4c88eb886df8a5180823fbcab432c5 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Wed, 21 Oct 2026 21:35:28 +0300
 Subject: [PATCH 2/2] BoardConfig: OrangeFox settings, fastbootd and partition
@@ -13,14 +13,14 @@ Subject: [PATCH 2/2] BoardConfig: OrangeFox settings, fastbootd and partition
   flashlight/LED, and skip /data decryption, which this build does not
   include yet.
 ---
- BoardConfig.mk | 32 ++++++++++++++++++++++++++++++++
- 1 file changed, 32 insertions(+)
+ BoardConfig.mk | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
 
 diff --git a/BoardConfig.mk b/BoardConfig.mk
-index 5cc434f..1b14eca 100644
+index 5cc434f..7803330 100644
 --- a/BoardConfig.mk
 +++ b/BoardConfig.mk
-@@ -126,3 +126,35 @@ TW_EXCLUDE_APEX := true
+@@ -126,3 +126,34 @@ TW_EXCLUDE_APEX := true
  TARGET_USES_LOGD := true
  TWRP_INCLUDE_LOGCAT := true
  TW_HAS_DOWNLOAD_MODE := true
@@ -55,7 +55,6 @@ index 5cc434f..1b14eca 100644
 +# No /data decryption in this build (Samsung keymint with wrapped keys is a
 +# separate step): do not wait for or prompt for it.
 +OF_SKIP_FBE_DECRYPTION := 1
-+OF_DEFAULT_TIMEZONE := "UTC;0"
 -- 
 2.47.3
 
