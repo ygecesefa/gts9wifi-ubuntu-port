@@ -1,0 +1,58 @@
+From 2c04a7e9a598c930a8982bd47be832134845923c Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Wed, 21 Oct 2026 21:35:16 +0300
+Subject: [PATCH 1/2] fstab: no wipe of internal UFS or the Ubuntu card;
+ LineageOS 22 /data flags
+
+- twrp.flags: drop /usb-otg on /dev/block/sda1. On this tablet sda is the
+  internal UFS (LUN 0), not a USB stick: Wipe -> USB-OTG would format an
+  internal partition.
+- twrp.flags: /external_sd without wipeingui. Its first partition is
+  GTS9W_BACK on an Ubuntu card, which holds the switch zips (the way back
+  to Android).
+- recovery.fstab: drop /sdcard on mmcblk0p1; there is no mmcblk0 here (the
+  card is mmcblk1, internal storage is /data/media).
+- recovery.fstab: /data with the flags LineageOS 22 formats it with
+  (FBE v2, wrapped keys, metadata encryption, from
+  samsung-sm8550-tab/android_device_samsung_sm8550-common init/fstab.qcom)
+  instead of the old full-disk 'encryptable=footer'.
+---
+ recovery/root/system/etc/recovery.fstab | 3 +--
+ recovery/root/system/etc/twrp.flags     | 3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/recovery/root/system/etc/recovery.fstab b/recovery/root/system/etc/recovery.fstab
+index f58a68c..9040982 100644
+--- a/recovery/root/system/etc/recovery.fstab
++++ b/recovery/root/system/etc/recovery.fstab
+@@ -50,7 +50,7 @@ system_dlkm	/system_dlkm	ext4	ro	wait,avb,logical,first_stage_mount
+ /dev/block/bootdevice/by-name/boot        /boot           emmc        defaults                  recoveryonly
+ /dev/block/bootdevice/by-name/recovery    /recovery       emmc        defaults                  recoveryonly
+ /dev/block/by-name/metadata	/metadata	ext4	noatime,nosuid,nodev,noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic,sync	wait,first_stage_mount,formattable,check
+-/dev/block/bootdevice/by-name/userdata	/data	f2fs	noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678	wait,encryptable=footer,length=-16384,fscompress
++/dev/block/bootdevice/by-name/userdata	/data	f2fs	noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678,inlinecrypt	wait,check,formattable,quota,reservedsize=128M,fscompress,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0,metadata_encryption=aes-256-xts:wrappedkey_v0,keydirectory=/metadata/vold/metadata_encryption
+ /dev/block/bootdevice/by-name/cache       /cache          ext4        defaults                  recoveryonly
+ /dev/block/bootdevice/by-name/sec_efs     /efs            ext4        defaults                  recoveryonly
+ /dev/block/bootdevice/by-name/sec_efs     /sec_efs        ext4        defaults                  recoveryonly
+@@ -72,7 +72,6 @@ system_dlkm	/system_dlkm	ext4	ro	wait,avb,logical,first_stage_mount
+ /dev/block/bootdevice/by-name/vendor_boot	/vendor_boot	emmc	default	recoveryonly
+ /dev/block/bootdevice/by-name/vbmeta_samsung	/vbmeta_samsung	emmc	default	recoveryonly
+ /dev/block/bootdevice/by-name/imagefv	/imagefv	emmc	default	recoveryonly
+-/dev/block/mmcblk0p1                      /sdcard         sdfat       defaults                  recoveryonly
+ /dev/block/bootdevice/by-name/init_boot	/init_boot	emmc	default	recoveryonly
+ /dev/block/bootdevice/by-name/vm-bootsys	/vm-bootsys	ext4	default	recoveryonly
+ /dev/block/bootdevice/by-name/qweslicstore	/qweslicstore	emmc	default	recoveryonly
+diff --git a/recovery/root/system/etc/twrp.flags b/recovery/root/system/etc/twrp.flags
+index 198d06c..dc1a3d6 100644
+--- a/recovery/root/system/etc/twrp.flags
++++ b/recovery/root/system/etc/twrp.flags
+@@ -50,5 +50,4 @@ vendor_dlkm	/vendor_dlkm	ext4						wait,logical,first_stage_mount
+ /preloader	    emmc		/dev/block/bootdevice/by-name/bootloader
+ 
+ # Removable storage
+-/external_sd   auto        /dev/block/mmcblk1p1    /dev/block/mmcblk1    flags=display="Micro SD card";storage;wipeingui;removable
+-/usb-otg       vfat        /dev/block/sda1         /dev/block/sda        flags=display="USB-OTG";storage;wipeingui;removable
++/external_sd   auto        /dev/block/mmcblk1p1    /dev/block/mmcblk1    flags=display="Micro SD card";storage;removable
+-- 
+2.47.3
+

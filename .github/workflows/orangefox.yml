@@ -1,0 +1,45 @@
+# Builds OrangeFox recovery for gts9wifi with recovery/build-orangefox.sh.
+# Run by hand: Actions -> OrangeFox recovery -> Run workflow.  The images
+# come out as a workflow artifact; nothing is published or flashed.
+name: OrangeFox recovery
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune -af || true
+          sudo mkdir -p /mnt/fox && sudo chown "$USER" /mnt/fox
+          df -h / /mnt
+
+      - name: Build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git git-lfs gnupg gperf imagemagick lib32readline-dev lib32z1-dev libelf-dev liblz4-tool \
+            libncurses5 libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool \
+            squashfs-tools xsltproc zip zlib1g-dev python2 python3 python-is-python3 cpio
+          mkdir -p ~/bin
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          git config --global user.name build
+          git config --global user.email build@localhost
+          git config --global color.ui false
+
+      - name: Build OrangeFox
+        run: bash recovery/build-orangefox.sh /mnt/fox
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orangefox-gts9wifi-${{ github.sha }}
+          path: /mnt/fox/out/
+          retention-days: 30

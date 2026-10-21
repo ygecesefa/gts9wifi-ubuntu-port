@@ -1,0 +1,55 @@
+From 42a7fa7ebad8aac620dd65b569158d876632608f Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Wed, 21 Oct 2026 21:35:28 +0300
+Subject: [PATCH 2/2] BoardConfig: OrangeFox settings, fastbootd and partition
+ tools
+
+- TW_INCLUDE_FASTBOOTD: keep the Samsung way into fastboot (userspace
+  fastbootd in recovery; the bootloader has none).
+- lptools/lpdump, repacktools, resetprop (as in dmXq-twrp-development's
+  sm8550-common tree).
+- OrangeFox: screen geometry for the rotated 2560x1600 panel, no
+  flashlight/LED, and skip /data decryption, which this build does not
+  include yet.
+---
+ BoardConfig.mk | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 5cc434f..27389ef 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -126,3 +126,30 @@ TW_EXCLUDE_APEX := true
+ TARGET_USES_LOGD := true
+ TWRP_INCLUDE_LOGCAT := true
+ TW_HAS_DOWNLOAD_MODE := true
++
++# fastbootd: Samsung's bootloader has no fastboot, so "Reboot -> Fastboot"
++# restarts into this recovery's userspace fastbootd (also implied by
++# PRODUCT_USE_DYNAMIC_PARTITIONS; stated here so it is not lost).
++TW_INCLUDE_FASTBOOTD := true
++
++# Tools for super/logical partitions and boot images
++TW_INCLUDE_LPTOOLS := true
++TW_INCLUDE_LPDUMP := true
++TW_INCLUDE_REPACKTOOLS := true
++TW_INCLUDE_RESETPROP := true
++TW_INCLUDE_LIBRESETPROP := true
++
++# OrangeFox
++OF_MAINTAINER := ygecesefa
++# 2560x1600 panel shown rotated (TW_ROTATION 270): OrangeFox lays out on a
++# 1080-wide canvas, so the height is 1080 * 2560 / 1600.
++OF_SCREEN_H := 1728
++OF_STATUS_H := 80
++OF_ENABLE_LPTOOLS := 1
++OF_FLASHLIGHT_ENABLE := 0
++OF_USE_GREEN_LED := 0
++OF_ALLOW_DISABLE_NAVBAR := 0
++# No /data decryption in this build (Samsung keymint with wrapped keys is a
++# separate step): do not wait for or prompt for it.
++OF_SKIP_FBE_DECRYPTION := 1
++OF_DEFAULT_TIMEZONE := "UTC;0"
+-- 
+2.47.3
+

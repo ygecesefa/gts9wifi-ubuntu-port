@@ -1,0 +1,65 @@
+#!/bin/bash
+# Build OrangeFox recovery for the Galaxy Tab S9 Wi-Fi (gts9wifi).
+#
+#   bash recovery/build-orangefox.sh [WORK_DIR]
+#
+# Needs an x86_64 Linux host (Android's build tools are x86_64 only),
+# about 60 GB free and 16 GB RAM; GitHub Actions runs it from
+# .github/workflows/orangefox.yml.  Output: WORK_DIR/out/ with the
+# recovery image, OrangeFox's flashable zip and SHA256SUMS.
+#
+# Recipe, all pinned:
+#   1. OrangeFox fox_12.1 sources, synced by OrangeFox's own sync script
+#      (a TWRP 12.1 minimal manifest plus OrangeFox's recovery and vendor).
+#   2. Device tree: rainbowdashh/android_device_samsung_gts9wifi, the tree
+#      of the TWRP "V2" that boots on this tablet (same prebuilt kernel,
+#      dtb, dtbo and modules), plus our patches in recovery/patches/.
+#   3. lunch twrp_gts9wifi-eng; mka adbd recoveryimage.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+work=$(realpath -m "${1:-$HOME/gts9wifi-fox}")
+fox=$work/fox_12.1
+
+sync_repo=https://gitlab.com/OrangeFox/sync.git
+sync_commit=03434a833701f73430cd085738ae0bf54f2231f1
+dt_repo=https://github.com/rainbowdashh/android_device_samsung_gts9wifi
+dt_commit=fe92d0fbb50f6563a69d021b1e9249858bb56c03
+
+[ "$(uname -m)" = x86_64 ] || { echo "needs an x86_64 host" >&2; exit 1; }
+mkdir -p "$work"
+
+echo "== 1/3 OrangeFox fox_12.1 sources -> $fox"
+if [ ! -d "$work/sync" ]; then
+	git clone -q "$sync_repo" "$work/sync"
+fi
+git -C "$work/sync" checkout -q "$sync_commit"
+if [ ! -f "$fox/build/envsetup.sh" ]; then
+	(cd "$work/sync" && ./orangefox_sync.sh --branch 12.1 --path "$fox")
+fi
+test -f "$fox/build/envsetup.sh" && test -d "$fox/bootable/recovery" && test -d "$fox/vendor/recovery"
+
+echo "== 2/3 device tree $dt_commit + recovery/patches"
+dt=$fox/device/samsung/gts9wifi
+rm -rf "$dt"
+git clone -q "$dt_repo" "$dt"
+git -C "$dt" checkout -q "$dt_commit"
+git -C "$dt" -c user.name=build -c user.email=build@localhost am -q "$here"/patches/*.patch
+git -C "$dt" log --oneline -n $(( $(ls "$here"/patches/*.patch | wc -l) + 1 ))
+
+echo "== 3/3 build"
+cd "$fox"
+export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C
+export FOX_BUILD_DEVICE=gts9wifi
+export FOX_VARIANT=ubuntu-port
+set +u   # envsetup.sh and lunch use unset variables
+source build/envsetup.sh
+lunch twrp_gts9wifi-eng
+mka adbd recoveryimage
+set -u
+
+prod=$fox/out/target/product/gts9wifi
+rm -rf "$work/out" && mkdir -p "$work/out"
+cp "$prod"/recovery.img "$work/out/"
+cp "$prod"/OrangeFox-*.img "$prod"/OrangeFox-*.zip "$work/out/" 2>/dev/null || true
+(cd "$work/out" && sha256sum * > SHA256SUMS && cat SHA256SUMS)
