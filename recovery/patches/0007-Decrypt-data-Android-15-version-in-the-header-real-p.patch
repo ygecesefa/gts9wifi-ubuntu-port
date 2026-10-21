@@ -1,0 +1,89 @@
+From d3db15a62b695e7e5c3a38ab096e1e4cc104a215 Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Thu, 22 Oct 2026 02:11:40 +0300
+Subject: [PATCH 7/7] Decrypt /data: Android 15 version in the header, real
+ patch levels, no StrongBox
+
+Third decryption build on the tablet: qseecomd, KeyMint, gatekeeper and
+keystore2 start at boot; /metadata's key is found ('Retrieving key from
+keymaster'), then two blockers, both confirmed by hand in RAM:
+
+- keystore2 never registered: it waited forever for
+  keymaster@4.0::IKeymasterDevice/strongbox, declared in our manifest but
+  served by nothing. Dropped from the manifest (after which keystore2
+  came up).
+- KeyMint then failed 'upgrade_keyblob_if_required: Upgrade failed,
+  ErrorCode(-38)': the recovery image says os_version 12.0.0 / patch
+  2099-12 (TWRP defaults), the keys were made by LineageOS 22 (boot image
+  15.0.0 / 2025-02, system 2025-02-05, vendor 2024-11-01). Put the
+  Android values in the recovery header (BOARD_MKBOOTIMG_ARGS) and let
+  prepdecrypt set the system/vendor patch props from build.prop
+  (prepdecrypt.setpatch), so no key upgrade is needed at all.
+---
+ BoardConfig.mk                              | 7 +++++++
+ recovery/root/init.recovery.keymint.rc      | 6 ++++++
+ recovery/root/vendor/etc/vintf/manifest.xml | 9 +++------
+ 3 files changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index ed88679..2f7436d 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -164,3 +164,10 @@ TW_INCLUDE_FBE_METADATA_DECRYPT := true
+ BOARD_USES_METADATA_PARTITION := true
+ BOARD_USES_QCOM_FBE_DECRYPTION := true
+ TW_USE_FSCRYPT_POLICY := 2
++# The bootloader hands the recovery image's os_version/os_patch_level to
++# TrustZone. KeyMint refuses keys made by a newer OS ("upgrade" from
++# Android 15 down to the 12.0.0 / 2099-12 TWRP writes fails with
++# INVALID_ARGUMENT), so the header carries the values of LineageOS 22's
++# boot image (15.0.0, 2025-02). BOARD_MKBOOTIMG_ARGS comes after the
++# default version arguments, so these win. Update them with Android.
++BOARD_MKBOOTIMG_ARGS += --os_version 15.0.0 --os_patch_level 2025-02-05
+diff --git a/recovery/root/init.recovery.keymint.rc b/recovery/root/init.recovery.keymint.rc
+index d38f7c0..50e1337 100644
+--- a/recovery/root/init.recovery.keymint.rc
++++ b/recovery/root/init.recovery.keymint.rc
+@@ -4,6 +4,12 @@
+ # service (with Samsung's libskeymint10device), started the same way:
+ # once qseecomd has registered its listeners, stopped after decryption.
+ 
++on init
++    # prepdecrypt: report the installed Android's own version and patch
++    # levels (system and vendor build.prop) instead of TWRP's, so KeyMint
++    # sees the values the keys were made with and needs no key upgrade.
++    setprop prepdecrypt.setpatch true
++
+ on post-fs
+     exec u:r:recovery:s0 root root -- /system/bin/sh /system/bin/gts9wifi-ta-links.sh
+ 
+diff --git a/recovery/root/vendor/etc/vintf/manifest.xml b/recovery/root/vendor/etc/vintf/manifest.xml
+index 7fd66b4..959da9d 100644
+--- a/recovery/root/vendor/etc/vintf/manifest.xml
++++ b/recovery/root/vendor/etc/vintf/manifest.xml
+@@ -3,7 +3,9 @@
+     needs. The tablet's own vendor manifest is manifest.version 8.0 with
+     sepolicy 202404, which TWRP 12.1's libvintf cannot parse at all (and
+     then no HAL may register). Entries copied from that manifest
+-    (vendor X710XXU4BXHB); KeyMint itself is in manifest/.
++    (vendor X710XXU4BXHB); KeyMint itself is in manifest/. The StrongBox
++    keymaster@4.0 entry is left out: nothing serves it in recovery and
++    keystore2 waits for every declared security HAL before it registers.
+ -->
+ <manifest version="2.0" type="device" target-level="7">
+     <hal format="hidl">
+@@ -11,11 +13,6 @@
+         <transport>hwbinder</transport>
+         <fqname>@1.0::IGatekeeper/default</fqname>
+     </hal>
+-    <hal format="hidl" override="true">
+-        <name>android.hardware.keymaster</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@4.0::IKeymasterDevice/strongbox</fqname>
+-    </hal>
+     <hal format="aidl">
+         <name>vendor.samsung.hardware.keymint</name>
+         <version>2</version>
+-- 
+2.47.3
+

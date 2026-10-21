@@ -23,6 +23,7 @@ workflow in GitHub Actions:
 | 0004 | `/data` decryption: KeyMint, qseecomd, gatekeeper and their libraries from **this tablet's own vendor** (X710XXU4BXHB, so they match its TrustZone apps), the tablet's vintf manifest, an init file that starts KeyMint, TWRP FBE + metadata decryption with Qualcomm wrapped keys, `device/qcom/twrp-common` |
 | 0005 | the libraries qseecomd loads with `dlopen` (RPMB, SSD, GPT… listeners), which a readelf closure misses: without them qseecomd stops at `RPMB_INIT failed` |
 | 0006 | a small VINTF manifest TWRP 12.1 can parse (the tablet's is version 8.0, rejected as a whole, so no HAL could register); KeyMint's TrustZone app from the apnhlos partition, mounted read-only and linked into `/vendor/firmware_mnt/image` |
+| 0007 | the recovery header says Android 15.0.0 / 2025-02 like LineageOS 22's boot image (KeyMint rejected the keys as made by a newer OS than TWRP's 12.0.0), real system/vendor patch levels via prepdecrypt, no StrongBox entry (keystore2 waited for it forever). **Tied to the installed Android:** update the values after an Android update |
 
 The vendor binaries in 0004–0005 are Samsung/Qualcomm files, carried as other
 TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).

@@ -1,7 +1,7 @@
 From 2c04a7e9a598c930a8982bd47be832134845923c Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Wed, 21 Oct 2026 21:35:16 +0300
-Subject: [PATCH 1/6] fstab: no wipe of internal UFS or the Ubuntu card;
+Subject: [PATCH 1/7] fstab: no wipe of internal UFS or the Ubuntu card;
  LineageOS 22 /data flags
 
 - twrp.flags: drop /usb-otg on /dev/block/sda1. On this tablet sda is the

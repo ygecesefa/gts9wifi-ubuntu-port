@@ -1,7 +1,7 @@
 From b053b55133ce2a817ebc942318889e1ef2dd3d90 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Thu, 22 Oct 2026 00:19:57 +0300
-Subject: [PATCH 6/6] Decrypt /data: a VINTF manifest TWRP can read; TrustZone
+Subject: [PATCH 6/7] Decrypt /data: a VINTF manifest TWRP can read; TrustZone
  apps from apnhlos
 
 Found by running the services by hand in the second decryption build:

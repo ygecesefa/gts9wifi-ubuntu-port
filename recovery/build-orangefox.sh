@@ -81,4 +81,14 @@ prod=$fox/out/target/product/gts9wifi
 rm -rf "$work/out" && mkdir -p "$work/out"
 cp "$prod"/recovery.img "$work/out/"
 cp "$prod"/OrangeFox-*.img "$prod"/OrangeFox-*.zip "$work/out/" 2>/dev/null || true
+# The header's os_version/os_patch_level must be Android's (patch 0007):
+# KeyMint rejects keys from a newer OS.
+python3 - "$work/out/recovery.img" <<'PY'
+import struct, sys
+v = struct.unpack_from('<I', open(sys.argv[1], 'rb').read(48), 44)[0]
+ver = '%d.%d.%d' % (v >> 25, (v >> 18) & 0x7f, (v >> 11) & 0x7f)
+patch = '%d-%02d' % (((v >> 4) & 0x7f) + 2000, v & 0xf)
+print('recovery header: os_version', ver, 'os_patch_level', patch)
+sys.exit(0 if (ver, patch) == ('15.0.0', '2025-02') else 1)
+PY
 (cd "$work/out" && sha256sum * > SHA256SUMS && cat SHA256SUMS)
