@@ -1,0 +1,26 @@
+From 1a02e53a3966aa8108c2d96942ceeb2500f6faa0 Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Wed, 21 Oct 2026 23:03:51 +0300
+Subject: [PATCH 3/4] twrp.flags: microSD explicitly not wipeable in the GUI
+
+TWRP/OrangeFox turn Wipe_Available_in_GUI on for /external_sd in code
+(partition.cpp, Setup_File_System), so dropping 'wipeingui' was not
+enough: OrangeFox still listed 'Micro SDCard' under Wipe. twrp.flags are
+applied after those defaults, so 'wipeingui=0' switches it off.
+---
+ recovery/root/system/etc/twrp.flags | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/recovery/root/system/etc/twrp.flags b/recovery/root/system/etc/twrp.flags
+index dc1a3d6..fc71029 100644
+--- a/recovery/root/system/etc/twrp.flags
++++ b/recovery/root/system/etc/twrp.flags
+@@ -50,4 +50,4 @@ vendor_dlkm	/vendor_dlkm	ext4						wait,logical,first_stage_mount
+ /preloader	    emmc		/dev/block/bootdevice/by-name/bootloader
+ 
+ # Removable storage
+-/external_sd   auto        /dev/block/mmcblk1p1    /dev/block/mmcblk1    flags=display="Micro SD card";storage;removable
++/external_sd   auto        /dev/block/mmcblk1p1    /dev/block/mmcblk1    flags=display="Micro SD card";storage;removable;wipeingui=0
+-- 
+2.47.3
+

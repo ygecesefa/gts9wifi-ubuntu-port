@@ -25,6 +25,8 @@ sync_repo=https://gitlab.com/OrangeFox/sync.git
 sync_commit=03434a833701f73430cd085738ae0bf54f2231f1
 dt_repo=https://github.com/rainbowdashh/android_device_samsung_gts9wifi
 dt_commit=fe92d0fbb50f6563a69d021b1e9249858bb56c03
+qcom_repo=https://github.com/TeamWin/android_device_qcom_twrp-common
+qcom_commit=98506f7919102378c8d52ee7d6a94a867f1b4c55
 
 [ "$(uname -m)" = x86_64 ] || { echo "needs an x86_64 host" >&2; exit 1; }
 mkdir -p "$work"
@@ -46,6 +48,13 @@ git clone -q "$dt_repo" "$dt"
 git -C "$dt" checkout -q "$dt_commit"
 git -C "$dt" -c user.name=build -c user.email=build@localhost am -q "$here"/patches/*.patch
 git -C "$dt" log --oneline -n $(( $(ls "$here"/patches/*.patch | wc -l) + 1 ))
+
+# /data decryption services (qseecomd, gatekeeper), named in the tree's
+# twrp.dependencies; the OrangeFox sync does not read that file.
+if [ ! -d "$fox/device/qcom/twrp-common" ]; then
+	git clone -q "$qcom_repo" "$fox/device/qcom/twrp-common"
+	git -C "$fox/device/qcom/twrp-common" checkout -q "$qcom_commit"
+fi
 
 echo "== 3/3 build"
 cd "$fox"
