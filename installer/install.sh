@@ -27,7 +27,8 @@
 #   6. only now write the four Ubuntu boot images, read them back
 # Android's userdata, super, vbmeta and everything else are never written.
 #
-# In Android, a card that already holds Ubuntu can be kept: then only the
+# In Android, a card that already holds Ubuntu is kept unless the user says
+# YES to erasing it: then only the
 # Android backup and the calibration are refreshed (and the Magisk module is
 # installed); boot partitions and the card's Ubuntu stay as they are.
 set -u
@@ -181,12 +182,19 @@ for name in boot init_boot vendor_boot dtbo; do
 	[ "$(blockdev --getsize64 $part)" = "$(size_of $name)" ] || fail "Unexpected size of the $name partition"
 done
 
+# Every question that goes on with something is asked so that going on is
+# YES (in Android: two presses); NO and no answer are always the safe way.
 keep=0
+erase_ok=0
 if [ $MODE = android ] && card_has_ubuntu; then
-	ask "Ubuntu is already on this SD card." \
-		"YES: keep it; only install the Magisk module" \
-		"     and refresh the Android backup on the card." \
-		"NO:  erase the card and install Ubuntu again." && keep=1
+	if ask "Ubuntu is already on this SD card." \
+		"ERASE the card and install Ubuntu again?" \
+		"(NO: keep the card; only install the Magisk module" \
+		" and refresh the Android backup on the card.)"; then
+		erase_ok=1
+	else
+		keep=1
+	fi
 fi
 
 if [ $keep = 0 ]; then
@@ -335,7 +343,7 @@ if [ $keep = 1 ]; then
 	if [ $no_boot_zip = 1 ]; then
 		ui " WARNING: this card has no ubuntu-boot.zip"
 		ui " (older install), so the module cannot switch"
-		ui " to Ubuntu. Install again and answer NO to"
+		ui " to Ubuntu. Install again and answer YES to"
 		ui " the first question to rebuild the card."
 	fi
 	ui " Switch to Ubuntu with the Magisk module"
@@ -346,6 +354,8 @@ if [ $keep = 1 ]; then
 fi
 
 # ---- 3. confirm ------------------------------------------------------------
+# (Already answered when the card held Ubuntu.)
+[ $erase_ok = 1 ] ||
 ask "WARNING: EVERYTHING on the microSD card" \
 	"($((card / 1953125)) GB) will be ERASED and Ubuntu installed." \
 	"Android and the internal storage are not changed." \
@@ -364,9 +374,17 @@ sync
 ui "Reading back to verify..."
 [ "$(head -c $raw_size $SD | sha256sum | cut -d' ' -f1)" = "$raw_sha" ] ||
 	fail "SD card read-back failed; boot partitions NOT changed"
+# New partition table.  In Android, ueventd (re)creates the partition nodes
+# only after vold has looked at the new disk, which took longer than 10 s on
+# the tablet: wait up to 60 s, then make missing nodes from sysfs.
 blockdev --rereadpt $SD
 i=0
-while [ ! -b ${SD}p3 ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+while [ ! -b ${SD}p3 ] && [ $i -lt 120 ]; do sleep 0.5; i=$((i + 1)); done
+for n in 1 2 3; do
+	[ -b ${SD}p$n ] && continue
+	d=$(cat /sys/block/mmcblk1/mmcblk1p$n/dev 2>/dev/null) || continue
+	mknod ${SD}p$n b ${d%%:*} ${d##*:}
+done
 [ -b ${SD}p1 ] && [ -b ${SD}p3 ] || fail "SD partitions did not appear; boot partitions NOT changed"
 ui "SD card OK."
 
@@ -420,7 +438,7 @@ ui "   ubuntu-boot.zip      -> Ubuntu"
 [ $backup = none ] && ui " WARNING: no Android backup was taken."
 ui " In Ubuntu: 'Switch to Android' in the dock."
 if [ $MODE = android ]; then
-	ui " In Android: the Magisk module (action button / WebUI)."
+	ui " In Android: Magisk module Action button (KernelSU: WebUI)."
 else
 	ui ""
 	ui " Fingerprint reader: in Android, install this"

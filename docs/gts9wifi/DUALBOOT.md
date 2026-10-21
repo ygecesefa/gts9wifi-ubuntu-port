@@ -56,8 +56,10 @@ never published, since the Android images must be the user's own.
 **Magisk module** (installed by the installer zip from the Magisk app, or by
 installing it again from Magisk and keeping the card):
 
-- Magisk 28+: the module's **action button**; KernelSU / APatch / WebUI X:
-  the module's **WebUI** (*Switch to Ubuntu*).
+- **Magisk** (28+): *Modules* → the Ubuntu module's **Action** (run)
+  button. Magisk has no WebUI of its own.
+- **KernelSU / APatch:** open the module's **WebUI** → *Switch to Ubuntu*
+  (also shows the card and backup status).
 - Both run `gts9w.sh ubuntu`: first `backup` (rebuild `android-restore.zip`
   if this Android's boot images changed since it was made), then
   `to-ubuntu.sh --yes`, which checks every image of `ubuntu-boot.zip`, copies

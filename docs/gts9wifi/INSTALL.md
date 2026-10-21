@@ -43,7 +43,7 @@ the install. TWRP's sideload screen may show no log; the zip still runs (adb
 on the PC shows the progress).
 
 For the fingerprint reader, afterwards in Android: install the same zip from
-the Magisk app once and answer **keep** (see below).
+the Magisk app once and answer **no** to erasing the card (see below).
 
 ## From the Magisk app
 
@@ -55,10 +55,14 @@ the Magisk app once and answer **keep** (see below).
 The installer then also copies the fingerprint calibration to the card and
 leaves the Magisk module, the Android → Ubuntu switch, installed.
 
-If the card already holds Ubuntu, the first question is whether to **keep**
-it: yes keeps the card as it is and only refreshes the Android backup,
+Every question that goes on with something (erasing, installing) needs
+**yes = two presses**; one press or no answer is always the safe way.
+
+If the card already holds Ubuntu, the first question is whether to **erase**
+it and install again: yes does the full install (no second erase question);
+no keeps the card as it is and only refreshes the Android backup,
 copies the calibration and installs the module (nothing is erased and the
-boot partitions are not written). No goes on to the full install.
+boot partitions are not written).
 
 ## First login
 

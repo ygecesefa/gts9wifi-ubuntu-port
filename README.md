@@ -64,7 +64,7 @@ tablet starts Android as before. Reboot: Ubuntu starts, and the root
 filesystem grows to the whole card on the first boot.
 
 Already installed from recovery? Install the same zip from Magisk once and
-answer **yes = keep** (a volume key twice) when it finds Ubuntu on the card: it then only
+answer **no** (one press) when it asks whether to erase the Ubuntu already on the card: it then only
 installs the Magisk module and copies the Android backup and fingerprint
 calibration; the card is not erased.
 
@@ -73,7 +73,7 @@ calibration; the card is not erased.
 | From → to | How |
 |---|---|
 | Ubuntu → Android | **Switch to Android** in the dock / app grid (one tap) |
-| Android → Ubuntu | the Magisk module: its **action button** (Magisk 28+), or its WebUI (KernelSU, APatch, or WebUI X with Magisk) |
+| Android → Ubuntu | **Magisk:** *Modules* → the Ubuntu module's **Action** (run) button. **KernelSU / APatch:** open the module's **WebUI** → *Switch to Ubuntu* |
 | either way, no root, any ROM | flash a **switch zip** in recovery |
 
 The switch zips are on the microSD, in its FAT partition `GTS9W_BACK` (in

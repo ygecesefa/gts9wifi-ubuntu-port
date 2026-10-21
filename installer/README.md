@@ -65,7 +65,8 @@ to unmount the card (`sm unmount`) before erasing, and after writing waits
 until vold has checked and mounted the new FAT before writing to it.
 
 From Magisk, on a card that already holds Ubuntu, the first question is
-*keep it?* — yes keeps the card and its Ubuntu and only refreshes
+*erase it and install again?* — yes does the full install; no (one
+press, or no answer) keeps the card and its Ubuntu and only refreshes
 `android-restore.zip`, copies the calibration and installs the module (for
 users who installed from recovery first).
 
