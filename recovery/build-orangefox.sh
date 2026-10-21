@@ -56,6 +56,13 @@ if [ ! -d "$fox/device/qcom/twrp-common" ]; then
 	git -C "$fox/device/qcom/twrp-common" checkout -q "$qcom_commit"
 fi
 
+# Default theme: OrangeFox's own "Black" style instead of "Cream".  The
+# built-in /twres/themes/style.xml is the default; a style picked in the
+# UI is saved under /sdcard/Fox/.theme and overrides it once /data is
+# usable.
+theme=$fox/bootable/recovery/gui/theme/portrait_hdpi/themes
+cp "$theme/styles/Black.xml" "$theme/style.xml"
+
 echo "== 3/3 build"
 cd "$fox"
 export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C

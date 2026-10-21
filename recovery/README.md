@@ -29,7 +29,7 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
 | | |
 |---|---|
-| Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software |
+| Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | to be tested |
 | `/data` | V2 and the first build: not decrypted (`Invalid argument`); 0004 adds decryption — to be tested |
