@@ -1,0 +1,327 @@
+From b053b55133ce2a817ebc942318889e1ef2dd3d90 Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Thu, 22 Oct 2026 00:19:57 +0300
+Subject: [PATCH 6/6] Decrypt /data: a VINTF manifest TWRP can read; TrustZone
+ apps from apnhlos
+
+Found by running the services by hand in the second decryption build:
+
+- The tablet's vendor manifest is manifest.version 8.0 with sepolicy
+  202404; TWRP 12.1's libvintf (4.0) rejects the whole file, so neither
+  KeyMint nor gatekeeper may register ('Could not find ...
+  IKeyMintDevice/default in the VINTF manifest', KeyMint aborts). Use a
+  small manifest with only the entries decryption needs (gatekeeper,
+  strongbox keymaster, Samsung KeyMint extension/factory; KeyMint itself
+  in manifest/), copied from the tablet's.
+- KeyMint then failed 'QSEECom_start_app failed': its TrustZone app
+  (skeymast.mdt/.bNN) is on the apnhlos partition, which Android mounts
+  at /vendor/firmware_mnt. That directory holds the ramdisk's touchscreen
+  firmware here, so gts9wifi-ta-links.sh mounts apnhlos read-only at
+  /mnt/apnhlos and links its images in (on post-fs).
+
+With both, by hand: qseecomd, KeyMint ('successfully load skeymint',
+SKeyMint 200.0.72), gatekeeper and keystore2 all run.
+---
+ recovery/root/init.recovery.keymint.rc        |   3 +
+ recovery/root/system/bin/gts9wifi-ta-links.sh |  11 +
+ recovery/root/vendor/etc/vintf/manifest.xml   | 240 +-----------------
+ 3 files changed, 21 insertions(+), 233 deletions(-)
+ create mode 100755 recovery/root/system/bin/gts9wifi-ta-links.sh
+
+diff --git a/recovery/root/init.recovery.keymint.rc b/recovery/root/init.recovery.keymint.rc
+index 24c0e48..d38f7c0 100644
+--- a/recovery/root/init.recovery.keymint.rc
++++ b/recovery/root/init.recovery.keymint.rc
+@@ -4,6 +4,9 @@
+ # service (with Samsung's libskeymint10device), started the same way:
+ # once qseecomd has registered its listeners, stopped after decryption.
+ 
++on post-fs
++    exec u:r:recovery:s0 root root -- /system/bin/sh /system/bin/gts9wifi-ta-links.sh
++
+ service keymint-qti /system/bin/android.hardware.security.keymint-service-qti
+     user root
+     group root drmrpc
+diff --git a/recovery/root/system/bin/gts9wifi-ta-links.sh b/recovery/root/system/bin/gts9wifi-ta-links.sh
+new file mode 100755
+index 0000000..bee78c1
+--- /dev/null
++++ b/recovery/root/system/bin/gts9wifi-ta-links.sh
+@@ -0,0 +1,11 @@
++#!/system/bin/sh
++# The TrustZone apps (KeyMint's "skeymast", gatekeeper, ...) live on the
++# apnhlos partition, which Android mounts at /vendor/firmware_mnt.  Here
++# that directory already holds the touchscreen/keyboard firmware of the
++# ramdisk, so mount apnhlos read-only elsewhere and link its images in.
++mkdir -p /mnt/apnhlos
++mount -t vfat -o ro /dev/block/bootdevice/by-name/apnhlos /mnt/apnhlos || exit 1
++for f in /mnt/apnhlos/image/*; do
++	n=/vendor/firmware_mnt/image/${f##*/}
++	[ -e "$n" ] || ln -s "$f" "$n"
++done
+diff --git a/recovery/root/vendor/etc/vintf/manifest.xml b/recovery/root/vendor/etc/vintf/manifest.xml
+index c851a80..7fd66b4 100644
+--- a/recovery/root/vendor/etc/vintf/manifest.xml
++++ b/recovery/root/vendor/etc/vintf/manifest.xml
+@@ -1,31 +1,11 @@
+ <!--
+-    Input:
+-        device/samsung/sm8550-common/vintf/manifest_kalama.xml
+-        device/samsung/sm8550-common/vintf/manifest_samsung.xml
+-        hardware/qcom-caf/sm8550/audio/primary-hal/configs/common/manifest_non_qmaa.xml
+-        hardware/qcom-caf/sm8550/audio/primary-hal/configs/common/manifest_non_qmaa_extn.xml
++    Recovery VINTF manifest for gts9wifi: only the HALs /data decryption
++    needs. The tablet's own vendor manifest is manifest.version 8.0 with
++    sepolicy 202404, which TWRP 12.1's libvintf cannot parse at all (and
++    then no HAL may register). Entries copied from that manifest
++    (vendor X710XXU4BXHB); KeyMint itself is in manifest/.
+ -->
+-<manifest version="8.0" type="device" target-level="7">
+-    <hal format="hidl">
+-        <name>android.hardware.audio</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@7.1::IDevicesFactory/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.audio.effect</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@7.0::IEffectsFactory/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.bluetooth</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IBluetoothHci/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.camera.provider</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.7::ICameraProvider/external/0</fqname>
+-    </hal>
++<manifest version="2.0" type="device" target-level="7">
+     <hal format="hidl">
+         <name>android.hardware.gatekeeper</name>
+         <transport>hwbinder</transport>
+@@ -36,212 +16,6 @@
+         <transport>hwbinder</transport>
+         <fqname>@4.0::IKeymasterDevice/strongbox</fqname>
+     </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.radio</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.2::ISap/slot1</fqname>
+-        <fqname>@1.2::ISap/slot2</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.soundtrigger</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.3::ISoundTriggerHw/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.tetheroffload.config</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IOffloadConfig/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.tetheroffload.control</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IOffloadControl/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>com.qualcomm.qti.dpm.api</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IdpmQmi/dpmQmiService</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>com.qualcomm.qti.imscmservice</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.2::IImsCmService/qti.ims.connectionmanagerservice</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>com.qualcomm.qti.uceservice</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.3::IUceService/com.qualcomm.qti.uceservice</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.lineage.livedisplay</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.0::IAdaptiveBacklight/default</fqname>
+-        <fqname>@2.0::IDisplayColorCalibration/default</fqname>
+-        <fqname>@2.0::ISunlightEnhancement/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.lineage.touch</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IGloveMode/default</fqname>
+-        <fqname>@1.0::ITouchscreenGesture/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.data.factory</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.7::IFactory/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.AGMIPC</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IAGM/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.ListenSoundModel</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IListenSoundModel/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.bluetooth_audio</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.1::IBluetoothAudioProvidersFactory/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.bluetooth_sar</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IBluetoothSar/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.btconfigstore</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.0::IBTConfigStore/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.cacert</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IService/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.capabilityconfigstore</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::ICapabilityConfigStore/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.data.connection</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IDataConnection/slot1</fqname>
+-        <fqname>@1.1::IDataConnection/slot2</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.data.latency</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::ILinkLatency/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.dpmservice</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IDpmService/DpmService</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.dsp</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IDspService/dspservice</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.embmssl</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IEmbms/embmsslServer0</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.factory</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::IFactory/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.fm</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IFmHci/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.mwqemadapter</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IMwqemAdapter/MwqemAdapter</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.pal</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IPAL/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.qccvndhal</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IQccvndhal/qccvndhal</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.qseecom</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IQSEECom/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.radio.internal.deviceinfo</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IDeviceInfo/deviceinfo</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.radio.lpa</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.3::IUimLpa/UimLpa0</fqname>
+-        <fqname>@1.3::IUimLpa/UimLpa1</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.radio.uim</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.2::IUim/Uim0</fqname>
+-        <fqname>@1.2::IUim/Uim1</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.radio.uim_remote_client</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IUimRemoteServiceClient/uimRemoteClient0</fqname>
+-        <fqname>@1.0::IUimRemoteServiceClient/uimRemoteClient1</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.radio.uim_remote_server</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IUimRemoteServiceServer/uimRemoteServer0</fqname>
+-        <fqname>@1.0::IUimRemoteServiceServer/uimRemoteServer1</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.trustedui</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.1::ITrustedInput/default</fqname>
+-        <fqname>@1.1::ITrustedInput/qtee-vm</fqname>
+-        <fqname>@1.2::ITrustedUI/default</fqname>
+-        <fqname>@1.2::ITrustedUI/qtee-vm</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.ims.callinfo</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IService/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.imsrtpservice</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@3.1::IRTPService/imsrtpservice</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.samsung.hardware.bluetooth</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@2.0::ISehBluetooth/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.samsung.hardware.bluetooth.a2dpsink</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::ISehBluetoothA2dpSinkProvidersFactory/default</fqname>
+-    </hal>
+-    <hal format="aidl">
+-        <name>vendor.samsung.hardware.bluetooth.audio</name>
+-        <fqname>ISehBluetoothAudioProviderFactory/default</fqname>
+-    </hal>
+     <hal format="aidl">
+         <name>vendor.samsung.hardware.keymint</name>
+         <version>2</version>
+@@ -253,6 +27,6 @@
+         <fqname>ISehKeyMintFactory/default</fqname>
+     </hal>
+     <sepolicy>
+-        <version>202404</version>
++        <version>33.0</version>
+     </sepolicy>
+ </manifest>
+-- 
+2.47.3
+

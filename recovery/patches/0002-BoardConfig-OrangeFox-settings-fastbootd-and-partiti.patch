@@ -1,7 +1,7 @@
 From 85e8aab45a4c88eb886df8a5180823fbcab432c5 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Wed, 21 Oct 2026 21:35:28 +0300
-Subject: [PATCH 2/5] BoardConfig: OrangeFox settings, fastbootd and partition
+Subject: [PATCH 2/6] BoardConfig: OrangeFox settings, fastbootd and partition
  tools
 
 - TW_INCLUDE_FASTBOOTD: keep the Samsung way into fastboot (userspace

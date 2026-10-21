@@ -1,7 +1,7 @@
 From 828ad8b8c6b7f2dd1b7a157c2edeb4cd26955a8f Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Wed, 21 Oct 2026 23:04:20 +0300
-Subject: [PATCH 4/5] Decrypt /data: KeyMint, qseecomd and gatekeeper from the
+Subject: [PATCH 4/6] Decrypt /data: KeyMint, qseecomd and gatekeeper from the
  tablet's vendor
 
 LineageOS 22 encrypts /data with FBE v2, hardware-wrapped keys and

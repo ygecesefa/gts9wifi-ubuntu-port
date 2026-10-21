@@ -22,6 +22,7 @@ workflow in GitHub Actions:
 | 0003 | microSD not wipeable from the Wipe list: TWRP enables that for `/external_sd` in code, so `twrp.flags` says `wipeingui=0` |
 | 0004 | `/data` decryption: KeyMint, qseecomd, gatekeeper and their libraries from **this tablet's own vendor** (X710XXU4BXHB, so they match its TrustZone apps), the tablet's vintf manifest, an init file that starts KeyMint, TWRP FBE + metadata decryption with Qualcomm wrapped keys, `device/qcom/twrp-common` |
 | 0005 | the libraries qseecomd loads with `dlopen` (RPMB, SSD, GPT… listeners), which a readelf closure misses: without them qseecomd stops at `RPMB_INIT failed` |
+| 0006 | a small VINTF manifest TWRP 12.1 can parse (the tablet's is version 8.0, rejected as a whole, so no HAL could register); KeyMint's TrustZone app from the apnhlos partition, mounted read-only and linked into `/vendor/firmware_mnt/image` |
 
 The vendor binaries in 0004–0005 are Samsung/Qualcomm files, carried as other
 TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
@@ -32,8 +33,8 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 |---|---|
 | Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
-| fastbootd (*Reboot → Fastboot*) | to be tested |
-| `/data` | V2 and the first build: not decrypted (`Invalid argument`); 0004 adds decryption — to be tested |
+| fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
+| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0006: qseecomd, KeyMint (TA loaded), gatekeeper and keystore2 run when started by hand; full decryption at boot to be tested |
 
 ## Flashing (test)
 

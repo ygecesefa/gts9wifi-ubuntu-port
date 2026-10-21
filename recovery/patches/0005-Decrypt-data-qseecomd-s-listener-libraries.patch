@@ -1,7 +1,7 @@
 From 788591b76cb78f7a371bccd98ab7cf5bf7cba735 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Thu, 22 Oct 2026 00:17:12 +0300
-Subject: [PATCH 5/5] Decrypt /data: qseecomd's listener libraries
+Subject: [PATCH 5/6] Decrypt /data: qseecomd's listener libraries
 
 qseecomd exited at once (status 255) in the first decryption build:
 'Init dlopen(librpmb.so) failed ... RPMB_INIT failed, shall not start
