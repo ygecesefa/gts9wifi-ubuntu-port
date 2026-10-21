@@ -47,8 +47,9 @@ Everything a switch needs is on the microSD's FAT partition `GTS9W_BACK`
 
 Both zips are recovery zips (same loader as the installer): flash one in TWRP
 or LineageOS recovery, answer Volume Up, and it writes and verifies the four
-partitions. No root, no Android version dependence: this is the safe way to
-switch whatever state either system is in. They are made on the tablet and
+partitions. They are the **emergency and no-root path**: no root, no Android
+version dependence, so they switch whatever state either system is in. Day to
+day, use the module's RUN button in Android and *Switch to Android* in Ubuntu. They are made on the tablet and
 never published, since the Android images must be the user's own.
 
 ## Android → Ubuntu
@@ -56,8 +57,9 @@ never published, since the Android images must be the user's own.
 **Magisk module** (installed by the installer zip from the Magisk app, or by
 installing it again from Magisk and keeping the card):
 
-- **Magisk** (28+): *Modules* → the Ubuntu module's **Action** (run)
-  button. Magisk has no WebUI of its own.
+- **Magisk** (28+): *Modules* → *Ubuntu for Galaxy Tab S9 Wi-Fi* → press its
+  **RUN** (▶ action) button. Nothing else: it checks, writes, verifies and
+  reboots into Ubuntu. Magisk has no WebUI of its own.
 - **KernelSU / APatch:** open the module's **WebUI** → *Switch to Ubuntu*
   (also shows the card and backup status).
 - Both run `gts9w.sh ubuntu`: first `backup` (rebuild `android-restore.zip`
@@ -72,7 +74,7 @@ installing it again from Magisk and keeping the card):
 (asks you to type `UBUNTU`). On a card with `GTS9W_BACK` it only uses that
 card's `ubuntu-boot.zip`; older cards fall back to `/sdcard/Ubuntu/images/`.
 
-**Without root:** flash `GTS9W_BACK/ubuntu-boot.zip` in recovery.
+**Emergencies, or without root:** flash `GTS9W_BACK/ubuntu-boot.zip` in recovery (TWRP).
 
 The fingerprint calibration (`calib.dat`, `egoptbds.dat` from Android's
 `/data/vendor/biometrics/meta`) is unique to each tablet and exists only in

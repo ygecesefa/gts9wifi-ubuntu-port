@@ -22,10 +22,10 @@ images are backed up first.
 
 ## Install
 
-One installer zip, two ways to run it: **in recovery** (TWRP, LineageOS
-recovery) or **from the Magisk app** as a module. Both do the same install;
-from Magisk you also get the Android-side switch and the fingerprint
-calibration in one go.
+One installer zip, two ways to run it: **from the Magisk app** as a module
+(recommended), or **in recovery** (TWRP, LineageOS recovery) for tablets
+without root. Both do the same install; from Magisk you also get the one-tap
+switch to Ubuntu and the fingerprint calibration in one go.
 
 You need:
 
@@ -73,10 +73,13 @@ calibration; the card is not erased.
 | From → to | How |
 |---|---|
 | Ubuntu → Android | **Switch to Android** in the dock / app grid (one tap) |
-| Android → Ubuntu | **Magisk:** *Modules* → the Ubuntu module's **Action** (run) button. **KernelSU / APatch:** open the module's **WebUI** → *Switch to Ubuntu* |
-| either way, no root, any ROM | flash a **switch zip** in recovery |
+| Android → Ubuntu | **Magisk:** *Modules* → *Ubuntu for Galaxy Tab S9 Wi-Fi* → press its **RUN** (▶ action) button. That is all: it checks, writes, verifies and reboots into Ubuntu. **KernelSU / APatch:** open the module's **WebUI** → *Switch to Ubuntu* |
+| emergencies, or no root | flash a **switch zip** in recovery (TWRP) |
 
-The switch zips are on the microSD, in its FAT partition `GTS9W_BACK` (in
+Day to day you only need the two buttons above. The recovery zips are the
+fallback: when something went wrong, or on a tablet without root.
+
+The switch zips (emergency and no-root path) are on the microSD, in its FAT partition `GTS9W_BACK` (in
 Android: the SD card's top folder):
 
 | File | Flash it in recovery to |
@@ -101,6 +104,13 @@ Ubuntu installs it at the next boot. Then enrol a finger in *Settings →
 Users*.
 
 Details and recovery paths: [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Ubuntu desktop on the Galaxy Tab S9](docs/gts9wifi/screenshots/desktop.jpg) | ![Settings → About](docs/gts9wifi/screenshots/about.jpg) |
+| ![App grid](docs/gts9wifi/screenshots/apps.jpg) | |
 
 ## What works
 

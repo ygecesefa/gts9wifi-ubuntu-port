@@ -353,6 +353,11 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	chroot "$rootfs" systemctl enable "$unit" >/dev/null 2>&1 || echo "  ! could not enable $unit"
 done
 
+# mmdebstrap leaves a copy of the build host's resolv.conf behind (here a
+# Tailscale one pointing at 100.100.100.100): with it, a fresh card has no DNS
+# and so no time sync. Point it at systemd-resolved, as on a stock install.
+ln -sfn ../run/systemd/resolve/stub-resolv.conf "$rootfs/etc/resolv.conf"
+
 echo "== 4/6 test user '$user'"
 if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
 	chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$user" 2>/dev/null || \

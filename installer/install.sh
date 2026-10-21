@@ -346,8 +346,11 @@ if [ $keep = 1 ]; then
 		ui " to Ubuntu. Install again and answer YES to"
 		ui " the first question to rebuild the card."
 	fi
-	ui " Switch to Ubuntu with the Magisk module"
-	ui " (action button or WebUI), after a reboot."
+	ui ""
+	ui " >>> Android -> Ubuntu (after a reboot):"
+	ui "     Magisk > Modules > Ubuntu for Galaxy"
+	ui "     Tab S9 Wi-Fi > press its RUN (action) button."
+	ui "     KernelSU / APatch: the module's WebUI."
 	ui "=============================================="
 	cleanup
 	exit 0
@@ -431,20 +434,26 @@ ui "=============================================="
 ui " DONE. Reboot: Ubuntu will start."
 ui " User: ubuntu   Password: ubuntu"
 ui ""
-ui " Switch zips on the SD card (GTS9W_BACK),"
-ui " flash in recovery, no root needed:"
+if [ $MODE = android ]; then
+	ui " >>> Android -> Ubuntu, every time:"
+	ui "     Magisk > Modules > Ubuntu for Galaxy"
+	ui "     Tab S9 Wi-Fi > press its RUN (action) button."
+	ui "     KernelSU / APatch: the module's WebUI."
+else
+	ui " >>> Android -> Ubuntu, every time: install this"
+	ui "     zip once from the Magisk app, then press the"
+	ui "     module's RUN (action) button. This also"
+	ui "     brings the fingerprint calibration over"
+	ui "     (keep the card in)."
+fi
+ui " >>> Ubuntu -> Android: 'Switch to Android' in"
+ui "     the dock."
+ui ""
+ui " Emergencies or no root: flash in recovery (TWRP)"
+ui " from the SD card's GTS9W_BACK partition:"
 [ $backup != none ] && ui "   android-restore.zip  -> Android"
 ui "   ubuntu-boot.zip      -> Ubuntu"
 [ $backup = none ] && ui " WARNING: no Android backup was taken."
-ui " In Ubuntu: 'Switch to Android' in the dock."
-if [ $MODE = android ]; then
-	ui " In Android: Magisk module Action button (KernelSU: WebUI)."
-else
-	ui ""
-	ui " Fingerprint reader: in Android, install this"
-	ui " zip once from the Magisk app and keep the card"
-	ui " (the calibration can only be read there)."
-fi
 ui "=============================================="
 cleanup
 exit 0

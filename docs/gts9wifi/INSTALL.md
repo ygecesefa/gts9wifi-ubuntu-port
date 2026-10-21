@@ -79,5 +79,10 @@ ssh ubuntu@172.16.42.1
 
 ## Switching, and the way back
 
-See [DUALBOOT.md](DUALBOOT.md): *Switch to Android* in Ubuntu, the Magisk
-module in Android, and the two switch zips on the card for recovery.
+- Android → Ubuntu: Magisk → *Modules* → *Ubuntu for Galaxy Tab S9 Wi-Fi* →
+  **RUN** (▶ action) button. KernelSU / APatch: the module's WebUI.
+- Ubuntu → Android: *Switch to Android* in the dock.
+- Emergencies, or no root: flash `android-restore.zip` / `ubuntu-boot.zip`
+  from the card's `GTS9W_BACK` partition in recovery (TWRP).
+
+Details: [DUALBOOT.md](DUALBOOT.md).
