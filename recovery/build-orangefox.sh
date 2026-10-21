@@ -52,11 +52,14 @@ cd "$fox"
 export ALLOW_MISSING_DEPENDENCIES=true LC_ALL=C
 export FOX_BUILD_DEVICE=gts9wifi
 export FOX_VARIANT=ubuntu-port
-set +u   # envsetup.sh and lunch use unset variables
+# envsetup.sh and lunch use unset variables and return non-zero from
+# internal checks, so they run without -e/-u/pipefail; failures are
+# checked explicitly.
+set +eu +o pipefail
 source build/envsetup.sh
-lunch twrp_gts9wifi-eng
-mka adbd recoveryimage
-set -u
+lunch twrp_gts9wifi-eng || exit 1
+mka adbd recoveryimage || exit 1
+set -euo pipefail
 
 prod=$fox/out/target/product/gts9wifi
 rm -rf "$work/out" && mkdir -p "$work/out"
