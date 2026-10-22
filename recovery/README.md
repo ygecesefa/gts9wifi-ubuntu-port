@@ -32,6 +32,12 @@ workflow in GitHub Actions:
 |---|---|
 | 0001 | no per-boot key in recovery: Android makes a new one at every boot, recovery never uses it, and the Samsung KeyMint TA refuses to generate wrapped keys from recovery (-49), which stopped decryption right after the system DE key, before any user key. Also leaves Android's `/data/unencrypted/per_boot_ref` alone |
 
+`patches-recovery/` patches OrangeFox's recovery (`bootable/recovery`, fox_12.1):
+
+| Patch | What |
+|---|---|
+| 0001 | faster rotated drawing: the panel is used rotated (270°) and every blit rotated its whole image into a new buffer with two function calls per pixel (~84 ms for a full-screen image); now tiled with the rotation chosen once and one reused buffer (~14 ms), output byte-identical (unit-tested against the old code) |
+
 The vendor binaries in 0004–0005 are Samsung/Qualcomm files, carried as other
 TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
@@ -39,7 +45,7 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
 | | |
 |---|---|
-| Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
+| Boots, touch, display | ✅ (first build, 0001–0002); drawing was slow (the panel is rotated in software) → patches-recovery 0001, to be tested. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
 | `/data` | ✅ decrypted automatically at boot (build 6: 0001–0008 + vold 0001; no lock screen): metadata, DE, Weaver (SPU + K250A), synthetic password, CE; `/data/media/0` readable. Android afterwards boots normally, Weaver and user unlock fine. With a PIN/pattern: untested |

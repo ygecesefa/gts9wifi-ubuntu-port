@@ -61,6 +61,11 @@ if ! grep -q "gts9wifi: no per-boot key" "$fox/system/vold/FsCrypt.cpp"; then
 	git -C "$fox/system/vold" -c user.name=build -c user.email=build@localhost am -q "$here"/patches-vold/*.patch
 fi
 
+# OrangeFox's recovery (bootable/recovery, fox_12.1): recovery/patches-recovery/.
+if ! grep -q "chosen once, not per pixel" "$fox/bootable/recovery/minuitwrp/graphics_utils.cpp"; then
+	git -C "$fox/bootable/recovery" -c user.name=build -c user.email=build@localhost am -q "$here"/patches-recovery/*.patch
+fi
+
 # Default theme: OrangeFox's own "Black" style instead of "Cream".  The
 # built-in /twres/themes/style.xml is the default; a style picked in the
 # UI is saved under /sdcard/Fox/.theme and overrides it once /data is

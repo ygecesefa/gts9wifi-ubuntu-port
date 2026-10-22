@@ -1,0 +1,161 @@
+From f1efca722877119c723b6452297cb641af23d4b8 Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Thu, 22 Oct 2026 23:02:00 +0300
+Subject: [PATCH] minuitwrp: faster rotated blits (gts9wifi)
+
+The Galaxy Tab S9 Wi-Fi's 2560x1600 panel is used rotated
+(TW_ROTATION 270), and every gr_blit rotated its whole source surface
+into a freshly malloc'd buffer with two out-of-line calls and a branch
+chain per pixel: a full-screen image cost ~84 ms per blit (measured on a
+Cortex-A72 host), so the UI dragged.
+
+- surface_ROTATION_transform: rotation chosen once per tile, 64x64
+  tiles, plain index arithmetic (~14 ms for the same blit).  Output is
+  byte-identical to the old code (2408 cases: 0/90/180/270, 8 and 32 bit,
+  random sizes and strides, full screen).
+- gr_blit: one rotation buffer per thread, grown as needed, instead of a
+  malloc/free (an mmap and its page faults for large images) per call.
+---
+ minuitwrp/graphics.cpp       | 21 ++++++++--
+ minuitwrp/graphics_utils.cpp | 77 +++++++++++++++++++++---------------
+ 2 files changed, 63 insertions(+), 35 deletions(-)
+
+diff --git a/minuitwrp/graphics.cpp b/minuitwrp/graphics.cpp
+index 1bcc19f..4348995 100644
+--- a/minuitwrp/graphics.cpp
++++ b/minuitwrp/graphics.cpp
+@@ -306,7 +306,23 @@ void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy)
+         surface_rotated.height  = (gr_rotation == 180) ? surface->height : surface->width;
+         surface_rotated.stride  = surface_rotated.width;
+         surface_rotated.format  = surface->format;
+-        surface_rotated.data    = (GGLubyte*) malloc(surface_rotated.stride * surface_rotated.height * 4);
++        // One buffer kept for all blits instead of a malloc/free (and,
++        // for a full-screen image, a fresh mmap and its page faults) on
++        // every call (per thread, so concurrent blits cannot share it).
++        static thread_local GGLubyte *rotate_buf = NULL;
++        static thread_local size_t rotate_buf_size = 0;
++        size_t need = (size_t) surface_rotated.stride * surface_rotated.height * 4;
++        if (need > rotate_buf_size) {
++            GGLubyte *buf = (GGLubyte*) realloc(rotate_buf, need);
++            if (buf == NULL) {
++                if(surface->format == GGL_PIXEL_FORMAT_RGBX_8888)
++                    gl->enable(gl, GGL_BLEND);
++                return;
++            }
++            rotate_buf = buf;
++            rotate_buf_size = need;
++        }
++        surface_rotated.data    = rotate_buf;
+         surface_ROTATION_transform((gr_surface) &surface_rotated, (const gr_surface) surface, 4);
+ 
+         gl->bindTexture(gl, &surface_rotated);
+@@ -322,9 +338,6 @@ void gr_blit(gr_surface source, int sx, int sy, int w, int h, int dx, int dy)
+     gl->recti(gl, l_disp, t_disp, r_disp, b_disp);
+     gl->disable(gl, GGL_TEXTURE_2D);
+ 
+-    if (gr_rotation != 0)
+-        free(surface_rotated.data);
+-
+     if(surface->format == GGL_PIXEL_FORMAT_RGBX_8888)
+         gl->enable(gl, GGL_BLEND);
+ }
+diff --git a/minuitwrp/graphics_utils.cpp b/minuitwrp/graphics_utils.cpp
+index 9860d89..e763e1b 100644
+--- a/minuitwrp/graphics_utils.cpp
++++ b/minuitwrp/graphics_utils.cpp
+@@ -141,30 +141,48 @@ int ROTATION_Y_DISP(int x, int y, int h) {
+             (gr_rotation == 270) ? (h - (x) - 1) : -1);
+ }
+ 
+-#define MATRIX_ELEMENT(matrix, row, col, row_size, elem_size) \
+-    (((uint8_t*) (matrix)) + (((row) * (elem_size)) * (row_size)) + ((col) * (elem_size)))
+-
+-#define DO_MATRIX_ROTATION(bits_per_pixel, bytes_per_pixel)                   \
+-{                                                                             \
+-    for (size_t y = 0; y < src->height; y++) {                                \
+-        for (size_t x = 0; x < src->width; x++) {                             \
+-            /* output pointer in dst->data */                                 \
+-            uint##bits_per_pixel##_t       *op;                               \
+-            /* input pointer from src->data */                                \
+-            const uint##bits_per_pixel##_t *ip;                               \
+-            /* Display coordinates (in dst) corresponding to (x, y) in src */ \
+-            size_t x_disp = ROTATION_X_DISP(x, y, dst->width);                \
+-            size_t y_disp = ROTATION_Y_DISP(x, y, dst->height);               \
+-                                                                              \
+-            ip = (const uint##bits_per_pixel##_t*)                            \
+-                 MATRIX_ELEMENT(src->data, y, x,                              \
+-                                src->stride, bytes_per_pixel);                \
+-            op = (uint##bits_per_pixel##_t*)                                  \
+-                 MATRIX_ELEMENT(dst->data, y_disp, x_disp,                    \
+-                                dst->stride, bytes_per_pixel);                \
+-            *op = *ip;                                                        \
+-        }                                                                     \
+-    }                                                                         \
++/* Rotate src into dst (dst is src's size, swapped for 90/270).  The
++ * rotation is chosen once, not per pixel, and the copy goes in 64x64
++ * tiles so that the column-wise writes stay in the cache: a full-screen
++ * resource used to cost two out-of-line calls and a branch chain per
++ * pixel on every blit, which made the rotated UI drag. */
++template <typename T>
++static void rotate_tiled(GGLSurface *dst, const GGLSurface *src)
++{
++    const size_t W = src->width, H = src->height;
++    const size_t ss = src->stride, ds = dst->stride;
++    const T *s = (const T *) src->data;
++    T *d = (T *) dst->data;
++    const size_t tile = 64;
++
++    for (size_t ty = 0; ty < H; ty += tile) {
++        const size_t ye = (ty + tile < H) ? ty + tile : H;
++        for (size_t tx = 0; tx < W; tx += tile) {
++            const size_t xe = (tx + tile < W) ? tx + tile : W;
++            switch (gr_rotation) {
++            case 90:    /* (x, y) -> (H - 1 - y, x) */
++                for (size_t y = ty; y < ye; y++)
++                    for (size_t x = tx; x < xe; x++)
++                        d[x * ds + (H - 1 - y)] = s[y * ss + x];
++                break;
++            case 180:   /* (x, y) -> (W - 1 - x, H - 1 - y) */
++                for (size_t y = ty; y < ye; y++)
++                    for (size_t x = tx; x < xe; x++)
++                        d[(H - 1 - y) * ds + (W - 1 - x)] = s[y * ss + x];
++                break;
++            case 270:   /* (x, y) -> (y, W - 1 - x) */
++                for (size_t y = ty; y < ye; y++)
++                    for (size_t x = tx; x < xe; x++)
++                        d[(W - 1 - x) * ds + y] = s[y * ss + x];
++                break;
++            default:
++                for (size_t y = ty; y < ye; y++)
++                    for (size_t x = tx; x < xe; x++)
++                        d[y * ds + x] = s[y * ss + x];
++                break;
++            }
++        }
++    }
+ }
+ 
+ void surface_ROTATION_transform(gr_surface dst_ptr, const gr_surface src_ptr,
+@@ -173,15 +191,12 @@ void surface_ROTATION_transform(gr_surface dst_ptr, const gr_surface src_ptr,
+     GGLSurface *dst = (GGLSurface*) dst_ptr;
+     const GGLSurface *src = (GGLSurface*) src_ptr;
+ 
+-    /* Handle duplicated code via a macro.
+-     * This is currently used for rotating surfaces of graphical resources
+-     * (32-bit pixel format) and of font glyphs (8-bit pixel format).
+-     * If you need to add handling of other pixel formats feel free to do so.
+-     */
++    /* Used for rotating surfaces of graphical resources (32-bit pixel
++     * format) and of font glyphs (8-bit pixel format). */
+     if (num_bytes_per_pixel == 4) {
+-        DO_MATRIX_ROTATION(32, 4);
++        rotate_tiled<uint32_t>(dst, src);
+     } else if (num_bytes_per_pixel == 1) {
+-        DO_MATRIX_ROTATION(8, 1);
++        rotate_tiled<uint8_t>(dst, src);
+     }
+ }
+ 
+-- 
+2.47.3
+

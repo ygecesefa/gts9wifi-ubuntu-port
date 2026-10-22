@@ -26,3 +26,4 @@
 # vendor files with CRLF lines: byte-exact, or git am fails.
 recovery/patches/*.patch -text
 recovery/patches-vold/*.patch -text
+recovery/patches-recovery/*.patch -text
