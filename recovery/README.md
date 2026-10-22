@@ -24,6 +24,7 @@ workflow in GitHub Actions:
 | 0005 | the libraries qseecomd loads with `dlopen` (RPMB, SSD, GPT… listeners), which a readelf closure misses: without them qseecomd stops at `RPMB_INIT failed` |
 | 0006 | a small VINTF manifest TWRP 12.1 can parse (the tablet's is version 8.0, rejected as a whole, so no HAL could register); KeyMint's TrustZone app from the apnhlos partition, mounted read-only and linked into `/vendor/firmware_mnt/image` |
 | 0007 | the recovery header says Android 15.0.0 / 2025-02 like LineageOS 22's boot image (KeyMint rejected the keys as made by a newer OS than TWRP's 12.0.0), real system/vendor patch levels via prepdecrypt, no StrongBox entry (keystore2 waited for it forever). **Tied to the installed Android:** update the values after an Android update |
+| 0008 | Samsung **Weaver** (Android 15 wraps user 0's synthetic password with it even without a lock screen): `hermesd` (K250A secure element) and the SPU it needs, brought up as Android does (`sec_nvm`, `spdaemon`, once per boot) with a tmpfs copy of the NVM from `persist` (mounted `ro,noload`, nothing written); a ueventd rule for `/dev/mem_buf_vm/` (without it the SPU's buffer is never assigned, its watchdog bites and the kernel panics); no K250A firmware images in the ramdisk, so the secure element is never updated |
 
 `patches-vold/` patches TWRP's vold (`system/vold`, TeamWin android-12.1):
 
@@ -41,7 +42,7 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 | Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
-| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0007: services start at boot, metadata decrypted (`/data` on dm-7), system DE key installed; stopped at the per-boot key → vold 0001, to be tested |
+| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0008 + vold 0001: metadata, DE, Weaver, synthetic password and CE all work, tested by hand in recovery (`User 0 Decrypted Successfully`, `/data/media/0` readable); the automatic start at boot (0008) to be tested |
 
 ## Flashing (test)
 
