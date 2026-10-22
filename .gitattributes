@@ -21,3 +21,8 @@
 # with checkpatch instead of treating those markers as defects in the patch
 # container itself.
 *.patch whitespace=-blank-at-eol,-space-before-tab
+
+# Recovery patches carry Samsung/Qualcomm binaries (git binary patches) and
+# vendor files with CRLF lines: byte-exact, or git am fails.
+recovery/patches/*.patch -text
+recovery/patches-vold/*.patch -text
