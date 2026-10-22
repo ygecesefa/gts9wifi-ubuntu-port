@@ -98,7 +98,7 @@ After an Android (or Magisk) update the Magisk module refreshes
 before each switch to Ubuntu.
 
 **Fingerprint:** the sensor's factory calibration exists only in Android's
-encrypted `/data`, which no recovery can read. Installing from Magisk (or
+encrypted `/data`, which other recoveries for this tablet cannot read. Installing from Magisk (or
 the Magisk module afterwards) copies it to `GTS9W_BACK/fingerprint/`;
 Ubuntu installs it at the next boot. Then enrol a finger in *Settings →
 Users*.
@@ -202,12 +202,21 @@ zips ([installer/](installer)).
 | ANA38407 AMSA46AS02 panel (2960×1848) | ANA38407 AMSA10FA01 panel (2560×1600) |
 | four cameras | two cameras (HI1337 rear + DW9808 lens, HI1337 front) |
 
+## Recovery (OrangeFox)
+
+An OrangeFox recovery for this tablet that **decrypts `/data`** on
+LineageOS 22, keeps fastbootd and cannot wipe the Ubuntu card by mistake:
+release `recovery-orangefox-1`. What works, limits and how to flash it:
+[recovery/RELEASE-NOTES-orangefox-1.md](recovery/RELEASE-NOTES-orangefox-1.md);
+the recipe and every patch: [recovery/README.md](recovery/README.md).
+
 ## Documentation
 
 - [INSTALL.md](docs/gts9wifi/INSTALL.md) — installing, step by step
 - [DUALBOOT.md](docs/gts9wifi/DUALBOOT.md) — how switching works, and how to recover
 - [installer/README.md](installer/README.md) — the installer zip, the Magisk module, the switch zips, and testing them without a tablet
 - [BUILDING.md](docs/gts9wifi/BUILDING.md) — building every image from source
+- [recovery/README.md](recovery/README.md) — the OrangeFox recovery: recipe, patches, status
 - [KNOWN-ISSUES.md](docs/gts9wifi/KNOWN-ISSUES.md) — open issues and the work queue
 - [PORTING-LOG.md](docs/gts9wifi/PORTING-LOG.md) — what was done, in order, including mistakes
 
