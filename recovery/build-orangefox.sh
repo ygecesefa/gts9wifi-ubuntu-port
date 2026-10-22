@@ -56,6 +56,11 @@ if [ ! -d "$fox/device/qcom/twrp-common" ]; then
 	git -C "$fox/device/qcom/twrp-common" checkout -q "$qcom_commit"
 fi
 
+# TWRP's vold (system/vold, TeamWin android-12.1): recovery/patches-vold/.
+if ! grep -q "gts9wifi: no per-boot key" "$fox/system/vold/FsCrypt.cpp"; then
+	git -C "$fox/system/vold" -c user.name=build -c user.email=build@localhost am -q "$here"/patches-vold/*.patch
+fi
+
 # Default theme: OrangeFox's own "Black" style instead of "Cream".  The
 # built-in /twres/themes/style.xml is the default; a style picked in the
 # UI is saved under /sdcard/Fox/.theme and overrides it once /data is

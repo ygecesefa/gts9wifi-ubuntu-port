@@ -1,0 +1,44 @@
+From 2cfccc13a20fac3460c2c9d8feb8359907cf0ebd Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Thu, 22 Oct 2026 18:01:09 +0300
+Subject: [PATCH] FsCrypt: no per-boot key in recovery (gts9wifi)
+
+Android creates a fresh per-boot key at every boot for /data/per_boot.
+Recovery never uses it, and on the Galaxy Tab S9 Wi-Fi the Samsung
+KeyMint TA refuses to generate wrapped keys from recovery (error -49,
+then QSEECom_send_cmd -14 on the export), so
+fscrypt_initialize_systemwide_keys failed right after installing the
+system DE key and no user key was ever tried.  Skipping the step also
+leaves Android's /data/unencrypted/per_boot_ref untouched.
+---
+ FsCrypt.cpp | 14 +++++---------
+ 1 file changed, 5 insertions(+), 9 deletions(-)
+
+diff --git a/FsCrypt.cpp b/FsCrypt.cpp
+index 7505e56..3c37cf4 100644
+--- a/FsCrypt.cpp
++++ b/FsCrypt.cpp
+@@ -486,15 +486,11 @@ install:
+     if (!android::vold::writeStringToFile(device_policy.key_raw_ref, ref_filename)) return false;
+     LOG(INFO) << "Wrote system DE key reference to:" << ref_filename;
+ 
+-    KeyBuffer per_boot_key;
+-    if (!generateStorageKey(makeGen(options), &per_boot_key)) return false;
+-    EncryptionPolicy per_boot_policy;
+-    if (!install_storage_key(DATA_MNT_POINT, options, per_boot_key, &per_boot_policy)) return false;
+-    std::string per_boot_ref_filename = std::string("/data") + fscrypt_key_per_boot_ref;
+-    if (!android::vold::writeStringToFile(per_boot_policy.key_raw_ref, per_boot_ref_filename))
+-        return false;
+-    LOG(INFO) << "Wrote per boot key reference to:" << per_boot_ref_filename;
+-
++    // gts9wifi: no per-boot key in recovery.  Android makes a new one at
++    // every boot for /data/per_boot; recovery never uses it, and here the
++    // Samsung KeyMint TA refuses to generate wrapped keys (-49), which made
++    // this function fail before any user key was tried.  Skipping it also
++    // leaves Android's /data/unencrypted/per_boot_ref untouched.
+     return true;
+ }
+ 
+-- 
+2.47.3
+

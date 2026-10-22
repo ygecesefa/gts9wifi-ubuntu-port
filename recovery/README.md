@@ -25,6 +25,12 @@ workflow in GitHub Actions:
 | 0006 | a small VINTF manifest TWRP 12.1 can parse (the tablet's is version 8.0, rejected as a whole, so no HAL could register); KeyMint's TrustZone app from the apnhlos partition, mounted read-only and linked into `/vendor/firmware_mnt/image` |
 | 0007 | the recovery header says Android 15.0.0 / 2025-02 like LineageOS 22's boot image (KeyMint rejected the keys as made by a newer OS than TWRP's 12.0.0), real system/vendor patch levels via prepdecrypt, no StrongBox entry (keystore2 waited for it forever). **Tied to the installed Android:** update the values after an Android update |
 
+`patches-vold/` patches TWRP's vold (`system/vold`, TeamWin android-12.1):
+
+| Patch | What |
+|---|---|
+| 0001 | no per-boot key in recovery: Android makes a new one at every boot, recovery never uses it, and the Samsung KeyMint TA refuses to generate wrapped keys from recovery (-49), which stopped decryption right after the system DE key, before any user key. Also leaves Android's `/data/unencrypted/per_boot_ref` alone |
+
 The vendor binaries in 0004–0005 are Samsung/Qualcomm files, carried as other
 TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
@@ -35,7 +41,7 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 | Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
-| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0006: qseecomd, KeyMint (TA loaded), gatekeeper and keystore2 run when started by hand; full decryption at boot to be tested |
+| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0007: services start at boot, metadata decrypted (`/data` on dm-7), system DE key installed; stopped at the per-boot key → vold 0001, to be tested |
 
 ## Flashing (test)
 
