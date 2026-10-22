@@ -45,7 +45,7 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 
 | | |
 |---|---|
-| Boots, touch, display | ✅ (first build, 0001–0002); drawing was slow (the panel is rotated in software) → patches-recovery 0001, to be tested. Default theme: Black (build script) |
+| Boots, touch, display | ✅ (first build, 0001–0002); drawing was slow (the panel is rotated in software) → patches-recovery 0001 (build 7, flashed; `/data` still decrypts at boot), smoothness to be confirmed by hand. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
 | `/data` | ✅ decrypted automatically at boot (build 6: 0001–0008 + vold 0001; no lock screen): metadata, DE, Weaver (SPU + K250A), synthetic password, CE; `/data/media/0` readable. Android afterwards boots normally, Weaver and user unlock fine. With a PIN/pattern: untested |
