@@ -42,7 +42,8 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 | Boots, touch, display | ✅ (first build, 0001–0002); drawing is slow: the panel is rotated in software. Default theme: Black (build script) |
 | system, vendor, product, odm, system_ext, microSD | ✅ mounted; 0 errors in `recovery.log` |
 | fastbootd (*Reboot → Fastboot*) | ✅ `fastboot devices` → fastbootd, `is-userspace: yes`; *Enable ADB* returns to recovery |
-| `/data` | V2 and the first build: not decrypted (`Invalid argument`). 0004–0008 + vold 0001: metadata, DE, Weaver, synthetic password and CE all work, tested by hand in recovery (`User 0 Decrypted Successfully`, `/data/media/0` readable); the automatic start at boot (0008) to be tested |
+| `/data` | ✅ decrypted automatically at boot (build 6: 0001–0008 + vold 0001; no lock screen): metadata, DE, Weaver (SPU + K250A), synthetic password, CE; `/data/media/0` readable. Android afterwards boots normally, Weaver and user unlock fine. With a PIN/pattern: untested |
+| Emergency switch | ✅ `GTS9W_BACK/android-restore.zip` flashed from OrangeFox: four images written and read back, Android starts |
 
 ## Flashing (test)
 
