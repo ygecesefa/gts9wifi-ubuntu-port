@@ -1,0 +1,58 @@
+#!/sbin/sh
+# Recovery zip for the Galaxy Tab S9 Wi-Fi (SM-X710, gts9wifi): writes the
+# recovery.img in this zip to the recovery partition and reads it back.
+# Flash it from TWRP / OrangeFox (Install, or adb sideload).  Nothing but the
+# recovery partition is written; Android and its data are not touched.
+#
+# Made by recovery/package-orangefox.sh.  Called by the recovery as
+#   update-binary <api> <OUTFD> <ZIPFILE>
+set -u
+
+OUTFD=$2
+ZIPFILE=$3
+W=/tmp/gts9w-recovery
+PART=/dev/block/by-name/recovery
+
+ui() { printf 'ui_print %s\nui_print\n' "$*" >> /proc/self/fd/$OUTFD; }
+fail() {
+	ui ""
+	ui "ERROR: $*"
+	rm -rf $W
+	exit 1
+}
+
+ui "=============================================="
+ui " OrangeFox recovery - Galaxy Tab S9 Wi-Fi (SM-X710)"
+ui "=============================================="
+dev=$(getprop ro.product.device)
+case "$dev $(getprop ro.build.product)" in
+	*gts9wifi*) ;;
+	*) fail "This zip is only for the SM-X710 (gts9wifi) (device: $dev)" ;;
+esac
+
+rm -rf $W
+mkdir -p $W
+unzip -o -q "$ZIPFILE" recovery.img recovery.img.sha256 -d $W || fail "Could not extract recovery.img"
+want=$(cut -d' ' -f1 $W/recovery.img.sha256)
+size=$(stat -c %s $W/recovery.img)
+[ "$(sha256sum $W/recovery.img | cut -d' ' -f1)" = "$want" ] || fail "sha256 mismatch: recovery.img"
+
+# On this tablet sda is the internal UFS: only the by-name recovery link is
+# written, and only if it points to a partition of it of a sane size.
+[ -e $PART ] || fail "Missing partition: $PART"
+case "$(readlink -f $PART)" in
+	/dev/block/sd[a-f][0-9]*) ;;
+	*) fail "$PART points to an unexpected device" ;;
+esac
+[ "$(blockdev --getsize64 $PART)" -ge "$size" ] || fail "recovery.img is larger than the recovery partition"
+
+ui "Writing: recovery"
+dd if=$W/recovery.img of=$PART bs=4194304 2>/dev/null || fail "Could not write recovery"
+sync
+[ "$(head -c $size $PART | sha256sum | cut -d' ' -f1)" = "$want" ] ||
+	fail "recovery did not verify after writing; flash the zip again before rebooting"
+rm -rf $W
+ui ""
+ui "DONE: recovery written and verified."
+ui "Reboot -> Recovery to start it."
+exit 0

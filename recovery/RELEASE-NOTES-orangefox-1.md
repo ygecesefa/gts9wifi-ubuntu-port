@@ -6,10 +6,18 @@ fastbootd) and is safe with an Ubuntu microSD card. Built in GitHub Actions
 from `recovery/build-orangefox.sh` (commit `cab0240`); every change is a
 documented patch in `recovery/` ([README](README.md)).
 
-## File
+## Files
 
-`OrangeFox-R12.0-gts9wifi-1.img` (109,576,192 bytes)
-sha256 `ebb5d65d9d57281e713ae0875e85fed938c903ce75740703266ae08a6cef0385`
+The same image, three ways (sha256 of all three in `OrangeFox-R12.0-gts9wifi-1.sha256`):
+
+| File | Install with |
+|---|---|
+| `OrangeFox-R12.0-gts9wifi-1.img` | root `dd`, or another TWRP's *Install Image → Recovery* |
+| `OrangeFox-R12.0-gts9wifi-1.zip` | TWRP / OrangeFox *Install* or `adb sideload`; writes only the recovery partition and reads it back |
+| `OrangeFox-R12.0-gts9wifi-1.tar.md5` | Odin, **AP** slot |
+
+The image: 109,576,192 bytes, sha256
+`ebb5d65d9d57281e713ae0875e85fed938c903ce75740703266ae08a6cef0385`.
 
 ## What works
 
@@ -38,17 +46,19 @@ sha256 `ebb5d65d9d57281e713ae0875e85fed938c903ce75740703266ae08a6cef0385`
 
 ## Installing
 
-Needs an unlocked bootloader. **Not with Odin.** Save the current recovery
-first. With root in Android (Magisk):
+Needs an unlocked bootloader. Save the current recovery first if you have
+root: `su -c 'dd if=/dev/block/by-name/recovery of=/sdcard/recovery-backup.img'`.
 
-```sh
-su -c 'dd if=/dev/block/by-name/recovery of=/sdcard/recovery-backup.img'
-su -c 'dd if=/sdcard/Download/OrangeFox-R12.0-gts9wifi-1.img of=/dev/block/by-name/recovery'
-```
+- **Root (Magisk):**
+  `su -c 'dd if=/sdcard/Download/OrangeFox-R12.0-gts9wifi-1.img of=/dev/block/by-name/recovery'`
+- **From a recovery you already have (TWRP, OrangeFox):** *Install* the
+  `.zip` (or `adb sideload` it), or *Install Image* the `.img` to *Recovery*.
+- **Odin:** the `.tar.md5` in **AP**, *Auto Reboot* off; when Odin says PASS,
+  go straight to recovery with *Volume Up + Power*. Not yet tested on this
+  tablet (root `dd` and the zip are).
 
-or from another TWRP: *Install → Install Image → Recovery*. Then boot to
-recovery with *Volume Up + Power*. To go back, write the backup the same way;
-a recovery never affects Android.
+Then boot to recovery with *Volume Up + Power*. A recovery never affects
+Android: to go back, write the backup the same way.
 
 ## Credits
 

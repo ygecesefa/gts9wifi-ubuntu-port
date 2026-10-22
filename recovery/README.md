@@ -51,6 +51,13 @@ TWRP trees for this tablet carry them (rainbowdashh, dmXq-twrp-development).
 | `/data` | ✅ decrypted automatically at boot (build 6: 0001–0008 + vold 0001; no lock screen): metadata, DE, Weaver (SPU + K250A), synthetic password, CE; `/data/media/0` readable. Android afterwards boots normally, Weaver and user unlock fine. With a PIN/pattern: untested |
 | Emergency switch | ✅ `GTS9W_BACK/android-restore.zip` flashed from OrangeFox: four images written and read back, Android starts |
 
+## Release files
+
+`package-orangefox.sh RECOVERY_IMG OUT_DIR NAME` makes the release files
+from a built image: the raw `.img`, a recovery `.zip` (its installer is
+`zip/update-binary`: device check, sha256, writes only `by-name/recovery`,
+reads it back) and an Odin `.tar.md5`, plus their sha256.
+
 ## Flashing (test)
 
 Never with Odin (it rejects images it cannot verify). From Android with
