@@ -45,6 +45,9 @@ mods['ffmpeg']['config-opts'] += [
     '--enable-decoder=hevc_v4l2m2m',
 ]
 mods['chiaki-ng']['sources'] += [{'type': 'patch', 'path': os.path.basename(p)} for p in patches]
+# The current KDE SDK's CMake installs json-c and miniupnpc under /app/lib64
+# on aarch64, where chiaki-ng's pkg-config lookup does not search.
+mods['chiaki-ng'].setdefault('build-options', {})['prepend-pkg-config-path'] = '/app/lib64/pkgconfig'
 yaml.safe_dump(m, open(path, 'w'), sort_keys=False)
 PY
 grep -n "v4l2\|\.patch" "$fh/$app.yaml"
