@@ -1,4 +1,4 @@
-From 280f22a42d62d8e2a36f4fa1adb7e55f0b32b0a8 Mon Sep 17 00:00:00 2001
+From 8010e97acd6d006a7c6e16913035060e99a00cd2 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Sat, 24 Oct 2026 19:25:39 +0300
 Subject: [PATCH 1/2] Decode with V4L2 M2M decoders ("v4l2m2m" hardware
@@ -10,10 +10,17 @@ memory-to-memory decoders. FFmpeg exposes them as decoders of their own
 never show up in the hw device list. Offer "v4l2m2m" on Linux when
 FFmpeg has them; frames come back in system memory and take the software
 frame path.
+
+The decoder is opened with the stream's size from the video profile
+(new width/height arguments of chiaki_ffmpeg_decoder_init): it sets up
+its capture buffers at open, and at 0x0 Qualcomm iris fails ("can't
+request capture buffers") and yields only empty, green frames.
 ---
- gui/src/qmlsettings.cpp |  6 ++++++
- lib/src/ffmpegdecoder.c | 18 +++++++++++++++++-
- 2 files changed, 23 insertions(+), 1 deletion(-)
+ gui/src/qmlsettings.cpp            |  6 +++++
+ gui/src/streamsession.cpp          |  1 +
+ lib/include/chiaki/ffmpegdecoder.h |  3 ++-
+ lib/src/ffmpegdecoder.c            | 35 ++++++++++++++++++++++++++++--
+ 4 files changed, 42 insertions(+), 3 deletions(-)
 
 diff --git a/gui/src/qmlsettings.cpp b/gui/src/qmlsettings.cpp
 index 2bb000bc..e67a0092 100644
@@ -32,8 +39,34 @@ index 2bb000bc..e67a0092 100644
      out.append("auto");
      return out;
  }
+diff --git a/gui/src/streamsession.cpp b/gui/src/streamsession.cpp
+index d9d0d45b..af68f9e8 100755
+--- a/gui/src/streamsession.cpp
++++ b/gui/src/streamsession.cpp
+@@ -421,6 +421,7 @@ StreamSession::StreamSession(const StreamSessionConnectInfo &connect_info, QObje
+ 		err = chiaki_ffmpeg_decoder_init(ffmpeg_decoder,
+ 				chiaki_log_sniffer_get_log(&sniffer),
+ 				chiaki_target_is_ps5(connect_info.target) ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
++				connect_info.video_profile.width, connect_info.video_profile.height,
+ 				connect_info.video_profile.max_fps,
+ 				connect_info.hw_decoder.isEmpty() ? NULL : connect_info.hw_decoder.toUtf8().constData(),
+ 				connect_info.hw_device_ctx, FfmpegFrameCb, this);
+diff --git a/lib/include/chiaki/ffmpegdecoder.h b/lib/include/chiaki/ffmpegdecoder.h
+index 8612457d..61d6b725 100644
+--- a/lib/include/chiaki/ffmpegdecoder.h
++++ b/lib/include/chiaki/ffmpegdecoder.h
+@@ -53,7 +53,8 @@ struct chiaki_ffmpeg_decoder_t
+ };
+ 
+ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *decoder, ChiakiLog *log,
+-		ChiakiCodec codec, unsigned int max_fps, const char *hw_decoder_name, AVBufferRef *hw_device_ctx,
++		ChiakiCodec codec, unsigned int width, unsigned int height, unsigned int max_fps,
++		const char *hw_decoder_name, AVBufferRef *hw_device_ctx,
+ 		ChiakiFfmpegFrameAvailable frame_available_cb, void *frame_available_cb_user);
+ CHIAKI_EXPORT void chiaki_ffmpeg_decoder_fini(ChiakiFfmpegDecoder *decoder);
+ CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user);
 diff --git a/lib/src/ffmpegdecoder.c b/lib/src/ffmpegdecoder.c
-index 8d088942..c840797f 100644
+index 8d088942..a11739ce 100644
 --- a/lib/src/ffmpegdecoder.c
 +++ b/lib/src/ffmpegdecoder.c
 @@ -4,6 +4,7 @@
@@ -44,7 +77,17 @@ index 8d088942..c840797f 100644
  
  static enum AVCodecID chiaki_codec_av_codec_id(ChiakiCodec codec)
  {
-@@ -54,7 +55,22 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+@@ -26,7 +27,8 @@ static double chiaki_ffmpeg_decoder_default_frame_duration_us(unsigned int max_f
+ }
+ 
+ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *decoder, ChiakiLog *log,
+-		ChiakiCodec codec, unsigned int max_fps, const char *hw_decoder_name, AVBufferRef *hw_device_ctx,
++		ChiakiCodec codec, unsigned int width, unsigned int height, unsigned int max_fps,
++		const char *hw_decoder_name, AVBufferRef *hw_device_ctx,
+ 		ChiakiFfmpegFrameAvailable frame_available_cb, void *frame_available_cb_user)
+ {
+ 	ChiakiErrorCode err = chiaki_mutex_init(&decoder->mutex, false);
+@@ -54,7 +56,26 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
  	avcodec_register_all();
  #endif
  	enum AVCodecID av_codec = chiaki_codec_av_codec_id(codec);
@@ -53,14 +96,18 @@ index 8d088942..c840797f 100644
 +	// such as Qualcomm iris/venus).  It is a decoder of its own, not a
 +	// hwaccel: no hw device, frames come back in system memory (NV12).
 +	decoder->av_codec = NULL;
-+	if(hw_decoder_name && !strcmp(hw_decoder_name, "v4l2m2m"))
++	bool v4l2m2m = hw_decoder_name && !strcmp(hw_decoder_name, "v4l2m2m");
++	if(v4l2m2m)
 +	{
 +		const char *name = av_codec == AV_CODEC_ID_HEVC ? "hevc_v4l2m2m" : "h264_v4l2m2m";
 +		decoder->av_codec = avcodec_find_decoder_by_name(name);
 +		if(decoder->av_codec)
 +			CHIAKI_LOGI(log, "Using V4L2 M2M decoder \"%s\"", name);
 +		else
++		{
 +			CHIAKI_LOGE(log, "V4L2 M2M decoder \"%s\" not available, decoding in software", name);
++			v4l2m2m = false;
++		}
 +		hw_decoder_name = NULL;
 +	}
 +	if(!decoder->av_codec)
@@ -68,6 +115,23 @@ index 8d088942..c840797f 100644
  	if(!decoder->av_codec)
  	{
  		CHIAKI_LOGE(log, "%s Codec not available", chiaki_codec_name(codec));
+@@ -102,6 +123,16 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+ 		CHIAKI_LOGI(log, "Using hardware decoder \"%s\" with pix_fmt=%s", hw_decoder_name, av_get_pix_fmt_name(decoder->hw_pix_fmt));
+ 	}
+ 
++	// A V4L2 M2M decoder sets up its capture (output picture) buffers when it
++	// is opened, from the size given here: opened at 0x0, Qualcomm iris fails
++	// ("can't request capture buffers") and returns only empty (green)
++	// frames.  The stream's own size, from the video profile; a different
++	// size later is handled by the decoder's source-change event.
++	if(v4l2m2m)
++	{
++		decoder->codec_context->width = width;
++		decoder->codec_context->height = height;
++	}
+ 	decoder->codec_context->framerate = decoder->synthetic_framerate;
+ 	decoder->codec_context->pkt_timebase = decoder->synthetic_time_base;
+ 	decoder->codec_context->time_base = decoder->synthetic_time_base;
 -- 
 2.47.3
 

@@ -1,4 +1,4 @@
-From 7f5d75ee7015ce962c2cd3a8d73aae729f670a3e Mon Sep 17 00:00:00 2001
+From f950ef2168ca080f8f771d2d492d2a20724d09c4 Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Sat, 24 Oct 2026 19:25:39 +0300
 Subject: [PATCH 2/2] Takion: 4 MiB socket receive buffer
