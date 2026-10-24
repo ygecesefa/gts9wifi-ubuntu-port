@@ -15,7 +15,7 @@ own manifest (pinned) with:
 | | What |
 |---|---|
 | FFmpeg | `--enable-v4l2-m2m`, `h264_v4l2m2m`, `hevc_v4l2m2m` |
-| [0001](patches/0001-Decode-with-V4L2-M2M-decoders-v4l2m2m-hardware-decod.patch) | a **v4l2m2m** choice under *Settings → Video → Hardware Decoder*: decodes with the V4L2 M2M decoder; frames come back in system memory (NV12) and take the software frame path to the Vulkan renderer. The decoder is opened with the stream's size: opened at 0x0 (as chiaki-ng opens its decoders), iris cannot set up its picture buffers and gives only green frames |
+| [0001](patches/0001-Decode-with-V4L2-M2M-decoders-v4l2m2m-hardware-decod.patch) | a **v4l2m2m** choice under *Settings → Video → Hardware Decoder*: decodes with the V4L2 M2M decoder; frames come back in system memory (NV12) and take the software frame path to the Vulkan renderer. Two things the stream does that iris does not take, each giving a green picture: the decoder opened at 0x0 (iris cannot set up its picture buffers: opened with the stream's size now), and SPS/PPS as a unit of their own (iris takes it as the end of the stream, then fails every buffer, firmware "session error 0x4000003": now held and sent in front of the next picture) |
 | [0002](patches/0002-Takion-4-MiB-socket-receive-buffer.patch) | 4 MiB UDP receive buffer instead of 100 KiB: on this tablet the kernel dropped parts of each 1080p frame burst (`RcvbufErrors`), seen as glitches and corrupt frames |
 
 0002 needs `net.core.rmem_max` of at least 4 MiB (Ubuntu's default is
@@ -33,7 +33,14 @@ tablet, `h264_v4l2m2m`, 1080p60, 299 access units:
 | | frames out | packets dropped | picture |
 |---|---|---|---|
 | opened at 0x0 | 1 | 259 | luma 0 (green) |
-| opened at 1920x1080 (0001) | 298 | 0 | luma 126, same as software |
+| opened at 1920x1080 | 298 | 0 | luma 126, same as software |
+| 1920x1080, SPS/PPS as a packet of their own (`SPLIT=1`, like the PS5) | 1 | 281 | green, "driver decode error" |
+
+`test/drive-ffmpegdecoder.c` runs chiaki-ng's own patched
+`ffmpegdecoder.c` the same way, SPS/PPS sent apart: 298 frames, no empty
+frame, no firmware error. Found with an `ioctl` trace of the real session
+(first output buffer: 41 bytes of SPS/PPS, then a LAST capture buffer and
+`EIO` on every buffer after it).
 
 ## Install
 

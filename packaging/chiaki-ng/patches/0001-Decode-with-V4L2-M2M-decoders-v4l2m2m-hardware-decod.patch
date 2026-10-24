@@ -1,4 +1,4 @@
-From 8010e97acd6d006a7c6e16913035060e99a00cd2 Mon Sep 17 00:00:00 2001
+From 81e27b0d1f2de281a68384738812ce978ea9e10d Mon Sep 17 00:00:00 2001
 From: ygecesefa <ygecesefa@gmail.com>
 Date: Sat, 24 Oct 2026 19:25:39 +0300
 Subject: [PATCH 1/2] Decode with V4L2 M2M decoders ("v4l2m2m" hardware
@@ -11,16 +11,22 @@ never show up in the hw device list. Offer "v4l2m2m" on Linux when
 FFmpeg has them; frames come back in system memory and take the software
 frame path.
 
-The decoder is opened with the stream's size from the video profile
-(new width/height arguments of chiaki_ffmpeg_decoder_init): it sets up
-its capture buffers at open, and at 0x0 Qualcomm iris fails ("can't
-request capture buffers") and yields only empty, green frames.
+Two things the stream does that iris does not take:
+- the decoder is opened at 0x0: it sets up its capture buffers at open
+  and fails ("can't request capture buffers"). Open it with the stream's
+  size from the video profile (new width/height arguments of
+  chiaki_ffmpeg_decoder_init).
+- SPS/PPS arrive as a unit of their own: iris takes a buffer without a
+  picture as the end of the stream (LAST buffer) and then fails every
+  buffer ("driver decode error", firmware session error 0x4000003).
+  Hold such units and send them in front of the next picture.
+Either one gives a green picture.
 ---
- gui/src/qmlsettings.cpp            |  6 +++++
+ gui/src/qmlsettings.cpp            |  6 ++
  gui/src/streamsession.cpp          |  1 +
- lib/include/chiaki/ffmpegdecoder.h |  3 ++-
- lib/src/ffmpegdecoder.c            | 35 ++++++++++++++++++++++++++++--
- 4 files changed, 42 insertions(+), 3 deletions(-)
+ lib/include/chiaki/ffmpegdecoder.h |  7 ++-
+ lib/src/ffmpegdecoder.c            | 94 +++++++++++++++++++++++++++++-
+ 4 files changed, 105 insertions(+), 3 deletions(-)
 
 diff --git a/gui/src/qmlsettings.cpp b/gui/src/qmlsettings.cpp
 index 2bb000bc..e67a0092 100644
@@ -52,10 +58,17 @@ index d9d0d45b..af68f9e8 100755
  				connect_info.hw_decoder.isEmpty() ? NULL : connect_info.hw_decoder.toUtf8().constData(),
  				connect_info.hw_device_ctx, FfmpegFrameCb, this);
 diff --git a/lib/include/chiaki/ffmpegdecoder.h b/lib/include/chiaki/ffmpegdecoder.h
-index 8612457d..61d6b725 100644
+index 8612457d..7e999543 100644
 --- a/lib/include/chiaki/ffmpegdecoder.h
 +++ b/lib/include/chiaki/ffmpegdecoder.h
-@@ -53,7 +53,8 @@ struct chiaki_ffmpeg_decoder_t
+@@ -50,10 +50,15 @@ struct chiaki_ffmpeg_decoder_t
+ 	double synthetic_candidate_duration_us;
+ 	uint64_t synthetic_last_sample_time_us;
+ 	uint8_t synthetic_candidate_count;
++	bool v4l2m2m;
++	bool hevc;
++	uint8_t *v4l2m2m_pending; // parameter sets waiting for the next picture
++	size_t v4l2m2m_pending_size;
  };
  
  CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *decoder, ChiakiLog *log,
@@ -66,18 +79,21 @@ index 8612457d..61d6b725 100644
  CHIAKI_EXPORT void chiaki_ffmpeg_decoder_fini(ChiakiFfmpegDecoder *decoder);
  CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user);
 diff --git a/lib/src/ffmpegdecoder.c b/lib/src/ffmpegdecoder.c
-index 8d088942..a11739ce 100644
+index 8d088942..57590593 100644
 --- a/lib/src/ffmpegdecoder.c
 +++ b/lib/src/ffmpegdecoder.c
-@@ -4,6 +4,7 @@
+@@ -2,8 +2,10 @@
+ #include <chiaki/ffmpegdecoder.h>
+ #include <chiaki/time.h>
  #include <libavcodec/avcodec.h>
++#include <libavutil/mem.h>
  #include <libavutil/pixdesc.h>
  #include <math.h>
 +#include <string.h>
  
  static enum AVCodecID chiaki_codec_av_codec_id(ChiakiCodec codec)
  {
-@@ -26,7 +27,8 @@ static double chiaki_ffmpeg_decoder_default_frame_duration_us(unsigned int max_f
+@@ -26,7 +28,8 @@ static double chiaki_ffmpeg_decoder_default_frame_duration_us(unsigned int max_f
  }
  
  CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *decoder, ChiakiLog *log,
@@ -87,7 +103,7 @@ index 8d088942..a11739ce 100644
  		ChiakiFfmpegFrameAvailable frame_available_cb, void *frame_available_cb_user)
  {
  	ChiakiErrorCode err = chiaki_mutex_init(&decoder->mutex, false);
-@@ -54,7 +56,26 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+@@ -54,7 +57,26 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
  	avcodec_register_all();
  #endif
  	enum AVCodecID av_codec = chiaki_codec_av_codec_id(codec);
@@ -115,7 +131,7 @@ index 8d088942..a11739ce 100644
  	if(!decoder->av_codec)
  	{
  		CHIAKI_LOGE(log, "%s Codec not available", chiaki_codec_name(codec));
-@@ -102,6 +123,16 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+@@ -102,6 +124,20 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
  		CHIAKI_LOGI(log, "Using hardware decoder \"%s\" with pix_fmt=%s", hw_decoder_name, av_get_pix_fmt_name(decoder->hw_pix_fmt));
  	}
  
@@ -124,6 +140,10 @@ index 8d088942..a11739ce 100644
 +	// ("can't request capture buffers") and returns only empty (green)
 +	// frames.  The stream's own size, from the video profile; a different
 +	// size later is handled by the decoder's source-change event.
++	decoder->v4l2m2m = v4l2m2m;
++	decoder->hevc = av_codec == AV_CODEC_ID_HEVC;
++	decoder->v4l2m2m_pending = NULL;
++	decoder->v4l2m2m_pending_size = 0;
 +	if(v4l2m2m)
 +	{
 +		decoder->codec_context->width = width;
@@ -132,6 +152,90 @@ index 8d088942..a11739ce 100644
  	decoder->codec_context->framerate = decoder->synthetic_framerate;
  	decoder->codec_context->pkt_timebase = decoder->synthetic_time_base;
  	decoder->codec_context->time_base = decoder->synthetic_time_base;
+@@ -129,10 +165,27 @@ CHIAKI_EXPORT void chiaki_ffmpeg_decoder_fini(ChiakiFfmpegDecoder *decoder)
+ 	avcodec_free_context(&decoder->codec_context);
+ 	if(decoder->hw_device_ctx)
+ 		av_buffer_unref(&decoder->hw_device_ctx);
++	av_freep(&decoder->v4l2m2m_pending);
+ 	chiaki_mutex_unlock(&decoder->mutex);
+ 	chiaki_mutex_fini(&decoder->mutex);
+ }
+ 
++// Whether an Annex B access unit holds a coded picture (a VCL NAL unit), or
++// only parameter sets / SEI.
++static bool chiaki_ffmpeg_has_picture(const uint8_t *buf, size_t size, bool hevc)
++{
++	for(size_t i = 0; i + 3 < size; i++)
++	{
++		if(buf[i] || buf[i + 1] || buf[i + 2] != 1)
++			continue;
++		uint8_t type = hevc ? (buf[i + 3] >> 1) & 0x3f : buf[i + 3] & 0x1f;
++		if(hevc ? type < 32 : (type >= 1 && type <= 5))
++			return true;
++		i += 2;
++	}
++	return false;
++}
++
+ CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user)
+ {
+ 	ChiakiFfmpegDecoder *decoder = user;
+@@ -187,6 +240,41 @@ CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t bu
+ 	if(frames_lost > 0)
+ 		decoder->synthetic_packet_pts += synthetic_duration_pts * (int64_t)frames_lost;
+ 
++	// Qualcomm iris (V4L2 M2M) takes a buffer with only SPS/PPS as the end of
++	// the stream and fails every buffer after it ("driver decode error",
++	// green picture); the stream sends them as a unit of their own.  Hold
++	// them and send them in front of the next picture.
++	uint8_t *joined = NULL;
++	if(decoder->v4l2m2m)
++	{
++		if(!chiaki_ffmpeg_has_picture(buf, buf_size, decoder->hevc))
++		{
++			uint8_t *p = av_realloc(decoder->v4l2m2m_pending, decoder->v4l2m2m_pending_size + buf_size);
++			if(p)
++			{
++				memcpy(p + decoder->v4l2m2m_pending_size, buf, buf_size);
++				decoder->v4l2m2m_pending = p;
++				decoder->v4l2m2m_pending_size += buf_size;
++			}
++			chiaki_mutex_unlock(&decoder->mutex);
++			return true;
++		}
++		if(decoder->v4l2m2m_pending)
++		{
++			joined = av_malloc(decoder->v4l2m2m_pending_size + buf_size + AV_INPUT_BUFFER_PADDING_SIZE);
++			if(joined)
++			{
++				memcpy(joined, decoder->v4l2m2m_pending, decoder->v4l2m2m_pending_size);
++				memcpy(joined + decoder->v4l2m2m_pending_size, buf, buf_size);
++				memset(joined + decoder->v4l2m2m_pending_size + buf_size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
++				buf = joined;
++				buf_size += decoder->v4l2m2m_pending_size;
++			}
++			av_freep(&decoder->v4l2m2m_pending);
++			decoder->v4l2m2m_pending_size = 0;
++		}
++	}
++
+ 	AVPacket *packet = av_packet_alloc();
+ 	packet->data = buf;
+ 	packet->size = buf_size;
+@@ -230,11 +318,13 @@ send_packet:
+ 		}
+ 	}
+ 	av_packet_free(&packet);
++	av_free(joined);
+ 	chiaki_mutex_unlock(&decoder->mutex);
+ 	decoder->frame_available_cb(decoder, decoder->frame_available_cb_user);
+ 	return true;
+ hell:
+ 	av_packet_free(&packet);
++	av_free(joined);
+ 	chiaki_mutex_unlock(&decoder->mutex);
+ 	return false;
+ }
 -- 
 2.47.3
 
