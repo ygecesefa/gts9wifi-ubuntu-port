@@ -44,9 +44,9 @@ frame, no firmware error. Found with an `ioctl` trace of the real session
 
 ## Install
 
-```sh
-flatpak uninstall io.github.streetpea.Chiaki4deck   # the Flathub build, if installed
-flatpak install --user chiaki-ng-gts9wifi.flatpak
-```
+Release `chiaki-ng-gts9wifi-1`: install steps, measurements and limits in
+[RELEASE-NOTES-1.md](RELEASE-NOTES-1.md). On the tablet: ~30 % CPU instead of
+~380 %, no dropped frames.
 
-Then *Settings → Video → Hardware Decoder: v4l2m2m*, *Stream → Codec: H264*.
+Not in the Ubuntu image yet (planned for a later version): the bundle, the
+`net.core.rmem_max` sysctl and the Wi-Fi power-save setting.
