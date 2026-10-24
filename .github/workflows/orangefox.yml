@@ -42,4 +42,4 @@ jobs:
         with:
           name: orangefox-gts9wifi-${{ github.sha }}
           path: /mnt/fox/out/
-          retention-days: 30
+          retention-days: 3

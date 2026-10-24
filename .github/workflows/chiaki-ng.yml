@@ -25,4 +25,4 @@ jobs:
         with:
           name: chiaki-ng-gts9wifi-${{ github.sha }}
           path: ~/chiaki-ng-build/out/
-          retention-days: 30
+          retention-days: 3
