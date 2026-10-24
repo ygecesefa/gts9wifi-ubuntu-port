@@ -1,0 +1,73 @@
+From 280f22a42d62d8e2a36f4fa1adb7e55f0b32b0a8 Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Sat, 24 Oct 2026 19:25:39 +0300
+Subject: [PATCH 1/2] Decode with V4L2 M2M decoders ("v4l2m2m" hardware
+ decoder)
+
+SoC video blocks such as Qualcomm iris/venus are stateful V4L2
+memory-to-memory decoders. FFmpeg exposes them as decoders of their own
+(h264_v4l2m2m, hevc_v4l2m2m), not as a hwaccel with a hw device, so they
+never show up in the hw device list. Offer "v4l2m2m" on Linux when
+FFmpeg has them; frames come back in system memory and take the software
+frame path.
+---
+ gui/src/qmlsettings.cpp |  6 ++++++
+ lib/src/ffmpegdecoder.c | 18 +++++++++++++++++-
+ 2 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/gui/src/qmlsettings.cpp b/gui/src/qmlsettings.cpp
+index 2bb000bc..e67a0092 100644
+--- a/gui/src/qmlsettings.cpp
++++ b/gui/src/qmlsettings.cpp
+@@ -1706,6 +1706,12 @@ QStringList QmlSettings::availableDecoders() const
+         if (allowed.contains(name) && hwDecoderRuntimeAvailable(name))
+             out.append(name);
+     }
++#if defined(Q_OS_LINUX)
++    // V4L2 M2M decoders (SoC video blocks) are decoders, not hw devices:
++    // offered when FFmpeg was built with them (see ffmpegdecoder.c).
++    if (avcodec_find_decoder_by_name("h264_v4l2m2m"))
++        out.append("v4l2m2m");
++#endif
+     out.append("auto");
+     return out;
+ }
+diff --git a/lib/src/ffmpegdecoder.c b/lib/src/ffmpegdecoder.c
+index 8d088942..c840797f 100644
+--- a/lib/src/ffmpegdecoder.c
++++ b/lib/src/ffmpegdecoder.c
+@@ -4,6 +4,7 @@
+ #include <libavcodec/avcodec.h>
+ #include <libavutil/pixdesc.h>
+ #include <math.h>
++#include <string.h>
+ 
+ static enum AVCodecID chiaki_codec_av_codec_id(ChiakiCodec codec)
+ {
+@@ -54,7 +55,22 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+ 	avcodec_register_all();
+ #endif
+ 	enum AVCodecID av_codec = chiaki_codec_av_codec_id(codec);
+-	decoder->av_codec = avcodec_find_decoder(av_codec);
++	// "v4l2m2m": a stateful V4L2 memory-to-memory decoder (SoC video blocks
++	// such as Qualcomm iris/venus).  It is a decoder of its own, not a
++	// hwaccel: no hw device, frames come back in system memory (NV12).
++	decoder->av_codec = NULL;
++	if(hw_decoder_name && !strcmp(hw_decoder_name, "v4l2m2m"))
++	{
++		const char *name = av_codec == AV_CODEC_ID_HEVC ? "hevc_v4l2m2m" : "h264_v4l2m2m";
++		decoder->av_codec = avcodec_find_decoder_by_name(name);
++		if(decoder->av_codec)
++			CHIAKI_LOGI(log, "Using V4L2 M2M decoder \"%s\"", name);
++		else
++			CHIAKI_LOGE(log, "V4L2 M2M decoder \"%s\" not available, decoding in software", name);
++		hw_decoder_name = NULL;
++	}
++	if(!decoder->av_codec)
++		decoder->av_codec = avcodec_find_decoder(av_codec);
+ 	if(!decoder->av_codec)
+ 	{
+ 		CHIAKI_LOGE(log, "%s Codec not available", chiaki_codec_name(codec));
+-- 
+2.47.3
+

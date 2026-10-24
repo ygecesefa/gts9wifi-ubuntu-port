@@ -1,0 +1,51 @@
+From 7f5d75ee7015ce962c2cd3a8d73aae729f670a3e Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Sat, 24 Oct 2026 19:25:39 +0300
+Subject: [PATCH 2/2] Takion: 4 MiB socket receive buffer
+
+SO_RCVBUF was set to a_rwnd (100 KiB). A 1080p frame arrives as a burst
+of packets and the kernel dropped part of it whenever the receiving
+thread was a little late (RcvbufErrors in /proc/net/snmp), seen as FEC
+failures and corrupt frames on a Galaxy Tab S9 over Wi-Fi. a_rwnd itself
+(the window advertised to the console) is unchanged.
+---
+ lib/src/takion.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/lib/src/takion.c b/lib/src/takion.c
+index e82ae690..45e49dcd 100644
+--- a/lib/src/takion.c
++++ b/lib/src/takion.c
+@@ -39,6 +39,11 @@
+ // VERY similar to SCTP, see RFC 4960
+ 
+ #define TAKION_A_RWND 0x19000
++// Socket receive buffer.  A 1080p/4K frame arrives as a burst of hundreds of
++// packets; with only a_rwnd (100 KiB) the kernel drops part of the burst when
++// the receiving thread is a little late (RcvbufErrors), which shows up as
++// FEC failures and corrupt frames.  Linux caps it at net.core.rmem_max.
++#define TAKION_SOCKET_RCVBUF (4 * 1024 * 1024)
+ #define TAKION_OUTBOUND_STREAMS 0x64
+ #define TAKION_INBOUND_STREAMS 0x64
+ 
+@@ -257,7 +262,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
+ 			CHIAKI_LOGE(takion->log, "Takion had problem reading extra messages from socket using PSN Connection with error: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+ 			goto error_sock;
+ 		}
+-		const int rcvbuf_val = takion->a_rwnd;
++		const int rcvbuf_val = TAKION_SOCKET_RCVBUF;
+ 		int r = setsockopt(takion->sock, SOL_SOCKET, SO_RCVBUF, (const CHIAKI_SOCKET_BUF_TYPE)&rcvbuf_val, sizeof(rcvbuf_val));
+ 		if(r < 0)
+ 		{
+@@ -345,7 +350,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
+ 			ret = CHIAKI_ERR_NETWORK;
+ 			goto error_pipe;
+ 		}
+-		const int rcvbuf_val = takion->a_rwnd;
++		const int rcvbuf_val = TAKION_SOCKET_RCVBUF;
+ 		int r = setsockopt(takion->sock, SOL_SOCKET, SO_RCVBUF, (const CHIAKI_SOCKET_BUF_TYPE)&rcvbuf_val, sizeof(rcvbuf_val));
+ 		if(r < 0)
+ 		{
+-- 
+2.47.3
+

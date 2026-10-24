@@ -1,0 +1,28 @@
+# Builds chiaki-ng with V4L2 M2M (iris) decoding as a Flatpak bundle with
+# packaging/chiaki-ng/build-chiaki-ng-flatpak.sh.  Run by hand: Actions ->
+# chiaki-ng -> Run workflow.  The bundle comes out as a workflow artifact.
+name: chiaki-ng
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder python3-yaml
+
+      - name: Build chiaki-ng
+        run: bash packaging/chiaki-ng/build-chiaki-ng-flatpak.sh "$HOME/chiaki-ng-build"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chiaki-ng-gts9wifi-${{ github.sha }}
+          path: ~/chiaki-ng-build/out/
+          retention-days: 30
