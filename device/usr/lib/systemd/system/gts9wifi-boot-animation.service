@@ -1,0 +1,20 @@
+[Unit]
+Description=Boot animation (Galaxy Tab S9 Wi-Fi)
+DefaultDependencies=no
+# The video is on the root filesystem, mounted by the initramfs: no need to
+# wait for local-fs.target (/boot and the rest).
+After=systemd-udevd.service systemd-udev-trigger.service
+# GDM stops it just before taking the screen, after it has played for at
+# least 5 s (gdm.service.d drop-in, gts9wifi-boot-animation --stop; a
+# Conflicts= here would put both start jobs of the boot in conflict).
+Conflicts=shutdown.target
+Before=gdm.service shutdown.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/gts9wifi-boot-animation
+# A stopped animation is not a failure.
+SuccessExitStatus=143 SIGTERM
+
+[Install]
+WantedBy=sysinit.target

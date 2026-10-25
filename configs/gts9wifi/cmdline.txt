@@ -1,10 +1,8 @@
-console=tty0
 console=ttyMSM0,115200n8
 ignore_console_null
 earlycon
-loglevel=3
 quiet
-splash
+loglevel=3
 vt.global_cursor_default=0
 log_buf_len=4M
 panic=10

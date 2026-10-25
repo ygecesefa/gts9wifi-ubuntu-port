@@ -1,0 +1,41 @@
+#!/bin/sh
+# Boot animation: play /usr/share/gts9wifi/boot-animation/galaxy.mp4 on the
+# panel until GDM starts.  Just before, GDM runs this with --stop
+# (gdm.service.d/gts9wifi-boot-animation.conf): it lets the animation play
+# for MIN_SECONDS (the logo shows ~2 s in; boot alone gave it ~3 s), then
+# stops gts9wifi-boot-animation.service.
+#
+# Not Plymouth: Plymouth draws every frame in software, full screen; on
+# this panel (2560x1600) it held ~60 % of a core at 10 fps and still
+# stuttered.  Here the tablet's video block (Qualcomm iris, v4l2h264dec)
+# decodes and the display controller scales and shows the frames (kmssink),
+# at the video's own 24 fps with the CPU idle.
+set -eu
+
+VIDEO=/usr/share/gts9wifi/boot-animation/galaxy.mp4
+STAMP=/run/gts9wifi-boot-animation.started
+MIN_SECONDS=5
+
+if [ "${1:-}" = --stop ]; then
+	if [ -f "$STAMP" ] && systemctl -q is-active gts9wifi-boot-animation.service; then
+		left=$(( $(cat "$STAMP") + MIN_SECONDS - $(date +%s) ))
+		[ "$left" -le 0 ] || sleep "$left"
+	fi
+	systemctl stop gts9wifi-boot-animation.service
+	exit 0
+fi
+
+[ -f "$VIDEO" ] || exit 0
+
+# The DRM device and the iris decoder (a module, with firmware) come up a
+# little after the root filesystem.
+for _ in $(seq 1 50); do
+	[ -e /dev/dri/card0 ] && grep -qsx 'qcom-iris-decoder' /sys/class/video4linux/video*/name && break
+	sleep 0.1
+done
+
+date +%s > "$STAMP"
+# 2560x1440 centred on the 2560x1600 panel.
+exec gst-launch-1.0 -q filesrc location="$VIDEO" ! qtdemux name=d d.video_0 ! queue ! \
+	h264parse ! v4l2h264dec ! kmssink driver-name=msm can-scale=true \
+	render-rectangle='<0,80,2560,1440>'

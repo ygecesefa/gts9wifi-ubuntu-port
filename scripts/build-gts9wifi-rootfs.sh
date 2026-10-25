@@ -363,7 +363,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
 	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
 	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path gts9wifi-import-backup.service \
-	gts9wifi-wifi-address.service \
+	gts9wifi-wifi-address.service gts9wifi-boot-animation.service \
 	gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service \
 	gts9wifi-fingerprint-ui.service \
 	ssh.service NetworkManager.service; do
@@ -374,6 +374,9 @@ done
 # Tailscale one pointing at 100.100.100.100): with it, a fresh card has no DNS
 # and so no time sync. Point it at systemd-resolved, as on a stock install.
 ln -sfn ../run/systemd/resolve/stub-resolv.conf "$rootfs/etc/resolv.conf"
+
+echo "== boot animation (branding/boot-animation)"
+bash "$repo/branding/boot-animation/make-boot-video.sh" "$rootfs"
 
 if [ "$chiaki" = 1 ]; then
 	echo "== chiaki-ng (Remote Play, iris hardware decoding) from $(basename "$chiaki_bundle")"
