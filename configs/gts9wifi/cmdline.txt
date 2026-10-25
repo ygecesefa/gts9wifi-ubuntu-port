@@ -4,6 +4,7 @@ earlycon
 quiet
 loglevel=3
 vt.global_cursor_default=0
+binder.devices=binder,hwbinder,vndbinder,anbox-binder,anbox-hwbinder,anbox-vndbinder
 log_buf_len=4M
 panic=10
 clk_ignore_unused

@@ -392,6 +392,22 @@ if [ "$chiaki" = 1 ]; then
 	chroot "$rootfs" flatpak info --system io.github.streetpea.Chiaki4deck | grep -E 'Version|Origin'
 fi
 
+echo "== Waydroid (Android apps; the Android image is downloaded on first launch)"
+# Waydroid's own repository (repo.waydro.id, key fingerprint
+# 7CE0331F71E0A238BB1002D70E406D181DCEE19C).  Only the package goes into
+# the image: the first launch asks Vanilla or GApps and downloads ~1 GB
+# (~3 GB unpacked).  This tablet's part: binder.devices in the cmdline
+# (anbox-* nodes, apart from the fingerprint stack's vndbinder) and
+# etc/systemd/system/waydroid-container.service.d (hides the host /vendor).
+rootfs_net_enter
+curl -fsSL https://repo.waydro.id/waydroid.gpg -o "$rootfs/usr/share/keyrings/waydroid.gpg"
+chroot "$rootfs" gpg --show-keys --with-colons /usr/share/keyrings/waydroid.gpg | \
+	grep -q '^fpr:::::::::7CE0331F71E0A238BB1002D70E406D181DCEE19C:' || { echo 'unexpected Waydroid key' >&2; exit 1; }
+echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ $suite main" \
+	> "$rootfs/etc/apt/sources.list.d/waydroid.list"
+rootfs_net_leave
+apt_in_rootfs waydroid
+
 echo "== 4/6 test user '$user'"
 if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
 	chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$user" 2>/dev/null || \
