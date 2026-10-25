@@ -37,14 +37,16 @@ The image: 109,576,192 bytes, sha256
   Android update that raises the patch level, KeyMint may refuse the keys
   until the recovery is rebuilt with the new values (patch 0007). The rest of
   the recovery keeps working.
-- Stock One UI: not tested with this build. Stock firmware checks the
-  recovery partition at boot (Android Verified Boot) and, finding a recovery
-  it did not sign, writes its own back over it. Flash
-  `vbmeta-disabled-SM-X710.tar.md5` with it: an empty vbmeta with
+- Stock One UI: not tested with this build. With stock firmware's vbmeta
+  the bootloader verifies the recovery partition (Android Verified Boot) and
+  does not start a recovery Samsung did not sign, so OrangeFox never gets to
+  run. Flash `vbmeta-disabled-SM-X710.tar.md5` with it: an empty vbmeta with
   verification turned off (flags=2, no descriptors, unsigned; exactly
-  `avbtool make_vbmeta_image --flags 2 --padding_size 4096`). On LineageOS
-  it is not needed: LineageOS's own vbmeta already lets the bootloader start
-  an unlocked recovery, and nothing restores it.
+  `avbtool make_vbmeta_image --flags 2 --padding_size 4096`). Stock Android
+  also writes its own recovery back at boot; OrangeFox stops that itself
+  once it has started, which is why it should be booted straight after
+  flashing. On LineageOS the file is not needed: its own vbmeta already lets
+  the bootloader start an unsigned recovery.
 - Lock screen PIN / pattern / password: not tested (tested without one).
 - The microSD cannot be wiped from *Wipe* on purpose (on an Ubuntu card it
   holds the switch zips). USB-OTG is not listed (the old TWRP pointed it at
