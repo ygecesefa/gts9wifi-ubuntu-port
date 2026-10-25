@@ -8,13 +8,14 @@ documented patch in `recovery/` ([README](README.md)).
 
 ## Files
 
-The same image, three ways (sha256 of all three in `OrangeFox-R12.0-gts9wifi-1.sha256`):
+The same image, three ways, and a vbmeta for stock firmware (sha256 of all of them in `OrangeFox-R12.0-gts9wifi-1.sha256`):
 
 | File | Install with |
 |---|---|
 | `OrangeFox-R12.0-gts9wifi-1.img` | root `dd`, or another TWRP's *Install Image → Recovery* |
 | `OrangeFox-R12.0-gts9wifi-1.zip` | TWRP / OrangeFox *Install* or `adb sideload`; writes only the recovery partition and reads it back |
 | `OrangeFox-R12.0-gts9wifi-1.tar.md5` | Odin, **AP** slot |
+| `vbmeta-disabled-SM-X710.tar.md5` | Odin, **USERDATA** slot, together with the recovery in AP: only on **stock One UI** (see below) |
 
 The image: 109,576,192 bytes, sha256
 `ebb5d65d9d57281e713ae0875e85fed938c903ce75740703266ae08a6cef0385`.
@@ -36,7 +37,14 @@ The image: 109,576,192 bytes, sha256
   Android update that raises the patch level, KeyMint may refuse the keys
   until the recovery is rebuilt with the new values (patch 0007). The rest of
   the recovery keeps working.
-- Stock One UI: not tested.
+- Stock One UI: not tested with this build. Stock firmware checks the
+  recovery partition at boot (Android Verified Boot) and, finding a recovery
+  it did not sign, writes its own back over it. Flash
+  `vbmeta-disabled-SM-X710.tar.md5` with it: an empty vbmeta with
+  verification turned off (flags=2, no descriptors, unsigned; exactly
+  `avbtool make_vbmeta_image --flags 2 --padding_size 4096`). On LineageOS
+  it is not needed: LineageOS's own vbmeta already lets the bootloader start
+  an unlocked recovery, and nothing restores it.
 - Lock screen PIN / pattern / password: not tested (tested without one).
 - The microSD cannot be wiped from *Wipe* on purpose (on an Ubuntu card it
   holds the switch zips). USB-OTG is not listed (the old TWRP pointed it at
@@ -53,9 +61,11 @@ root: `su -c 'dd if=/dev/block/by-name/recovery of=/sdcard/recovery-backup.img'`
   `su -c 'dd if=/sdcard/Download/OrangeFox-R12.0-gts9wifi-1.img of=/dev/block/by-name/recovery'`
 - **From a recovery you already have (TWRP, OrangeFox):** *Install* the
   `.zip` (or `adb sideload` it), or *Install Image* the `.img` to *Recovery*.
-- **Odin:** the `.tar.md5` in **AP**, *Auto Reboot* off; when Odin says PASS,
-  go straight to recovery with *Volume Up + Power*. Not yet tested on this
-  tablet (root `dd` and the zip are).
+- **Odin:** the `.tar.md5` in **AP** (on stock One UI also
+  `vbmeta-disabled-SM-X710.tar.md5` in **USERDATA**), *Auto Reboot* off; when
+  Odin says PASS, go straight to recovery with *Volume Up + Power*, before
+  the stock system can start and restore its recovery. Not yet tested on
+  this tablet (root `dd` and the zip are).
 
 Then boot to recovery with *Volume Up + Power*. A recovery never affects
 Android: to go back, write the backup the same way.
