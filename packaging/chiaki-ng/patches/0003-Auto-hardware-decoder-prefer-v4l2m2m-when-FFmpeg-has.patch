@@ -1,0 +1,39 @@
+From dc73c79f8c48b3c42c680516c046d1d82e23874f Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@gmail.com>
+Date: Sun, 25 Oct 2026 21:50:24 +0300
+Subject: [PATCH] Auto hardware decoder: prefer v4l2m2m when FFmpeg has it
+
+"auto" picked vulkan whenever a Vulkan device exists. On a Galaxy Tab S9
+(Adreno 740, Turnip) the Vulkan device has no video decoding and the
+stream decodes to a black picture, so a fresh install with default
+settings showed nothing. v4l2m2m is only offered when FFmpeg was built
+with V4L2 M2M decoders, i.e. for SoC video blocks such as Qualcomm iris.
+---
+ gui/src/qmlbackend.cpp | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/gui/src/qmlbackend.cpp b/gui/src/qmlbackend.cpp
+index e567f48e..3fb19475 100644
+--- a/gui/src/qmlbackend.cpp
++++ b/gui/src/qmlbackend.cpp
+@@ -1023,7 +1023,16 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
+     {
+         session_info.hw_decoder = QString();
+ #if defined(Q_OS_LINUX)
+-        if(!use_opengl_renderer && availableDecoders.contains("vulkan"))
++        // Offered only when FFmpeg has V4L2 M2M decoders, i.e. on SoCs whose
++        // video block is one (Qualcomm iris/venus); their GPUs may expose a
++        // Vulkan device without video decoding (Turnip), which decodes to a
++        // black picture.
++        if(availableDecoders.contains("v4l2m2m"))
++        {
++            qCInfo(chiakiGui) << "Auto hw decoder selecting v4l2m2m";
++            session_info.hw_decoder = "v4l2m2m";
++        }
++        else if(!use_opengl_renderer && availableDecoders.contains("vulkan"))
+         {
+             qCInfo(chiakiGui) << "Auto hw decoder selecting vulkan";
+             session_info.hw_decoder = "vulkan";
+-- 
+2.47.3
+
