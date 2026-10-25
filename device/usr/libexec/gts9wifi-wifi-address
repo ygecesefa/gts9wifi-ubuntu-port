@@ -1,5 +1,5 @@
 #!/bin/bash
-# Give the WCN6855 Wi-Fi interface its unit-specific MAC address.
+# Give the WCN6855 Wi-Fi its unit-specific MAC address.
 #
 # The board data carries no MAC address, so ath11k makes one up at every
 # boot (00:03:7f:…, Qualcomm's prefix): the router then sees a new device
@@ -7,19 +7,14 @@
 # Samsung's EFS (wifi/.mac.info).  EFS is only ever mounted read-only and
 # nothing on disk is written.
 #
-# Run by udev (80-gts9wifi-wifi-address.rules) when the interface appears,
-# before NetworkManager takes it (it is still down), so it also covers
-# re-registration after a Wi-Fi firmware recovery.  Argument: ifindex.
+# Runs once per boot before NetworkManager (gts9wifi-wifi-address.service)
+# and hands the address to it in /run: NetworkManager sets it on the ath11k
+# interface at every activation, also after a Wi-Fi firmware recovery.
+# (From a udev rule the mount fails: udevd has no CAP_SYS_ADMIN.)
 set -euo pipefail
 
 EFS=/dev/disk/by-partlabel/efs
-
-ifindex=$1
-dev=
-for f in /sys/class/net/*/ifindex; do
-	[ "$(cat "$f")" = "$ifindex" ] && dev=$(basename "$(dirname "$f")")
-done
-[ -n "$dev" ] || { echo "no interface with ifindex $ifindex" >&2; exit 1; }
+CONF=/run/NetworkManager/conf.d/50-gts9wifi-wifi-address.conf
 
 mnt=$(mktemp -d /run/gts9wifi-efs.XXXXXX)
 trap 'umount "$mnt" 2>/dev/null || true; rmdir "$mnt"' EXIT
@@ -31,12 +26,12 @@ if ! [[ $addr =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]] || [ "$addr" = 00:00:00
 	echo "invalid Wi-Fi address in EFS" >&2
 	exit 1
 fi
-addr=${addr,,}
-[ "$(cat "/sys/class/net/$dev/address")" = "$addr" ] && exit 0
 
-# The address can only change while the interface is down.
-up=$(ip -o link show dev "$dev" | grep -c '[<,]UP[,>]' || true)
-[ "$up" = 0 ] || ip link set dev "$dev" down
-ip link set dev "$dev" address "$addr"
-[ "$up" = 0 ] || ip link set dev "$dev" up
-echo "$dev address set from EFS (…${addr: -5})"
+mkdir -p "$(dirname "$CONF")"
+cat > "$CONF" <<EOF
+# Written at boot by gts9wifi-wifi-address from EFS (wifi/.mac.info).
+[connection-gts9wifi-wifi-address]
+match-device=driver:ath11k_pci
+wifi.cloned-mac-address=${addr,,}
+EOF
+echo "Wi-Fi address from EFS (…${addr: -5}) handed to NetworkManager"

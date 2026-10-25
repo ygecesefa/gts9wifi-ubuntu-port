@@ -1,0 +1,14 @@
+[Unit]
+Description=Wi-Fi MAC address from EFS (read-only) for NetworkManager
+Wants=dev-disk-by\x2dpartlabel-efs.device
+After=dev-disk-by\x2dpartlabel-efs.device
+Before=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/gts9wifi-wifi-address
+TimeoutStartSec=30
+
+[Install]
+WantedBy=NetworkManager.service

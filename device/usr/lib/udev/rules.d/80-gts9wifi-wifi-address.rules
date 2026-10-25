@@ -1,3 +1,0 @@
-# Set the unit-specific Wi-Fi MAC address (from EFS, read-only) whenever the
-# WCN6855 interface appears, before NetworkManager brings it up.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="ath11k_pci", RUN+="/usr/libexec/gts9wifi-wifi-address $env{IFINDEX}"

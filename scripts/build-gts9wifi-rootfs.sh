@@ -30,6 +30,12 @@ sensor_debs=${SENSOR_DEB_DIR:-$root/build/gts9wifi-ultra/out/packages}
 # binder context manager, bionic shims).
 fp_out=${FINGERPRINT_OUT_DIR:-$root/build/gts9wifi-ultra/out/fingerprint}
 rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
+# chiaki-ng (PS5/PS4 Remote Play) with the tablet's hardware video decoding,
+# the bundle of a chiaki-ng-gts9wifi-* release (packaging/chiaki-ng).  Its
+# Flatpak runtime comes from Flathub at build time.  GTS9WIFI_CHIAKI=0
+# leaves it out.
+chiaki=${GTS9WIFI_CHIAKI:-1}
+chiaki_bundle=${CHIAKI_BUNDLE:-$root/build/chiaki-ng/chiaki-ng-gts9wifi.flatpak}
 suite=noble
 mirror=${UBUNTU_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
 hostname=gts9wifi
@@ -49,6 +55,7 @@ for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/r
 	"$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$fp_out"/SHA256SUMS; do
 	test -e "$f" || { echo "missing: $f" >&2; exit 1; }
 done
+[ "$chiaki" != 1 ] || [ -f "$chiaki_bundle" ] || { echo "missing: $chiaki_bundle (or GTS9WIFI_CHIAKI=0)" >&2; exit 1; }
 case "$rootfs" in
 	"$root"/build/*) ;;
 	*) echo "refusing to build outside $root/build: $rootfs" >&2; exit 1 ;;
@@ -167,19 +174,28 @@ local_debs() {
 	(cd "$rootfs" && for f in tmp/gts9wifi-debs/*.deb; do [ -f "$f" ] && echo "/$f"; done)
 }
 
-apt_in_rootfs() {
+# Network inside the chroot: /proc, /sys, /dev and the host's DNS, restored after.
+rootfs_net_enter() {
 	for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
 	saved=0
 	if [ -e "$rootfs/etc/resolv.conf" ] || [ -L "$rootfs/etc/resolv.conf" ]; then
 		mv "$rootfs/etc/resolv.conf" "$rootfs/etc/resolv.conf.gts9wifi-build"; saved=1
 	fi
 	cp -L /etc/resolv.conf "$rootfs/etc/resolv.conf"
-	chroot "$rootfs" apt-get -o APT::Sandbox::User=root update -qq
-	chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@"
-	chroot "$rootfs" apt-get clean
+}
+
+rootfs_net_leave() {
 	rm -f "$rootfs/etc/resolv.conf"
 	[ "$saved" = 0 ] || mv "$rootfs/etc/resolv.conf.gts9wifi-build" "$rootfs/etc/resolv.conf"
 	for d in dev sys proc; do umount "$rootfs/$d"; done
+}
+
+apt_in_rootfs() {
+	rootfs_net_enter
+	chroot "$rootfs" apt-get -o APT::Sandbox::User=root update -qq
+	chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@"
+	chroot "$rootfs" apt-get clean
+	rootfs_net_leave
 }
 
 echo "== local packages: sensors (libssc, hexagonrpcd, iio-sensor-proxy), cameras (libcamera + PipeWire SPA)"
@@ -347,6 +363,7 @@ for unit in gts9wifi-usb-net.service gts9wifi-device-control.service \
 	mnt-vendor-persist.mount vendor.mount gts9wifi-adsp-boot.service pd-mapper.service \
 	gts9wifi-sensor-registry.service hexagonrpcd-adsp-sensorspd.service \
 	gts9wifi-rtc-restore.service gts9wifi-rtc-save.path gts9wifi-import-backup.service \
+	gts9wifi-wifi-address.service \
 	gts9wifi-fingerprint-runtime.service gts9wifi-fingerprint-secure.service \
 	gts9wifi-fingerprint-ui.service \
 	ssh.service NetworkManager.service; do
@@ -357,6 +374,20 @@ done
 # Tailscale one pointing at 100.100.100.100): with it, a fresh card has no DNS
 # and so no time sync. Point it at systemd-resolved, as on a stock install.
 ln -sfn ../run/systemd/resolve/stub-resolv.conf "$rootfs/etc/resolv.conf"
+
+if [ "$chiaki" = 1 ]; then
+	echo "== chiaki-ng (Remote Play, iris hardware decoding) from $(basename "$chiaki_bundle")"
+	# Its settings and the network tuning it needs (UDP buffers, Wi-Fi power
+	# save) are device files: etc/sysctl.d, etc/NetworkManager/conf.d.
+	apt_in_rootfs flatpak
+	install -m 0644 "$chiaki_bundle" "$rootfs/tmp/chiaki-ng-gts9wifi.flatpak"
+	rootfs_net_enter
+	chroot "$rootfs" flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+	chroot "$rootfs" flatpak install --system -y --noninteractive /tmp/chiaki-ng-gts9wifi.flatpak
+	rootfs_net_leave
+	rm -f "$rootfs/tmp/chiaki-ng-gts9wifi.flatpak"
+	chroot "$rootfs" flatpak info --system io.github.streetpea.Chiaki4deck | grep -E 'Version|Origin'
+fi
 
 echo "== 4/6 test user '$user'"
 if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
