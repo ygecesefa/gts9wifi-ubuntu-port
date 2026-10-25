@@ -136,6 +136,13 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | `/vendor` | ✅ | mapped read-only from Android's `super` (firmware source) |
 | USB host, docks, DisplayPort | 🟡 | drivers from the Fedora port; not tested on Ubuntu yet — reports welcome |
 
+Coming in **v0.3.0** (in the repository, tested on the tablet, installer not
+built yet — [release notes](docs/gts9wifi/RELEASE-NOTES-v0.3.0.md)):
+Android apps with **Waydroid** (GPU-accelerated), **PS5/PS4 Remote Play**
+with hardware decoding (chiaki-ng), a boot animation instead of kernel
+text, ~7 s faster boot, a stable Wi-Fi MAC address, power-key wake fix and
+an option to wake without the password.
+
 ### Fixed compared to the Fedora port
 
 | Fedora issue | Here |
