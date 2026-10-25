@@ -401,7 +401,7 @@ echo "== Waydroid (Android apps; the Android image is downloaded on first launch
 # etc/systemd/system/waydroid-container.service.d (hides the host /vendor).
 rootfs_net_enter
 curl -fsSL https://repo.waydro.id/waydroid.gpg -o "$rootfs/usr/share/keyrings/waydroid.gpg"
-chroot "$rootfs" gpg --show-keys --with-colons /usr/share/keyrings/waydroid.gpg | \
+gpg --show-keys --with-colons "$rootfs/usr/share/keyrings/waydroid.gpg" | \
 	grep -q '^fpr:::::::::7CE0331F71E0A238BB1002D70E406D181DCEE19C:' || { echo 'unexpected Waydroid key' >&2; exit 1; }
 echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ $suite main" \
 	> "$rootfs/etc/apt/sources.list.d/waydroid.list"
