@@ -63,8 +63,30 @@ export default class Gts9wifiPreferences extends ExtensionPreferences {
             groups.get(control.group).add(row);
         }
 
+        page.add(this._lockGroup());
         page.add(this._keyboardGroup());
         window.add(page);
+    }
+
+    // GNOME's own lock settings: lock-enabled covers the screen blanking after
+    // idle, Ubuntu's ubuntu-lock-on-suspend the suspend; gts9wifi-power-key
+    // reads lock-enabled and does not lock before suspending when it is off.
+    _lockGroup() {
+        const group = new Adw.PreferencesGroup({title: _('Screen lock')});
+        this._screensaver = new Gio.Settings({schema_id: 'org.gnome.desktop.screensaver'});
+        // Off by default (GNOME's default: lock-enabled true).
+        const row = new Adw.SwitchRow({
+            title: _('Wake without the password'),
+            subtitle: _('The password is asked once, at login: after that the power key and the screen timeout only turn the screen off, and waking goes straight back to the desktop.'),
+        });
+        this._screensaver.bind('lock-enabled', row, 'active',
+            Gio.SettingsBindFlags.DEFAULT | Gio.SettingsBindFlags.INVERT_BOOLEAN);
+        row.connect('notify::active', () => {
+            if (this._screensaver.settings_schema.has_key('ubuntu-lock-on-suspend'))
+                this._screensaver.set_boolean('ubuntu-lock-on-suspend', !row.active);
+        });
+        group.add(row);
+        return group;
     }
 
     _keyboardGroup() {

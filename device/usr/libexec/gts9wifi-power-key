@@ -9,8 +9,23 @@
 # (BOOTTIME - MONOTONIC grew; the kernel updates it before tasks thaw, unlike
 # suspend_stats) and the wake IRQ was the power key's.
 #
+# A press while the screen is off, or within WAKE_GRACE_MS after it came on
+# (Mutter's PowerSaveMode), only wakes the screen.  GNOME blanks a locked
+# screen after a short idle without suspending: the press then turned the
+# screen on (Mutter) and suspended (the lock screen was "active").
+#
+# A press that comes while a suspend is on its way (logind's PrepareForSleep
+# was sent) or within WAKE_GRACE_MS after the resume is the press that wakes
+# the tablet: it is dropped too.  The suspend takes ~2 s after the screen goes
+# dark (lock, then logind); a press in that time aborts it in the kernel, so
+# no time was spent asleep and the first test alone took it for a new press
+# and suspended again (the screen came on for a moment, then went off).  A
+# press while the lock is still being waited for cancels the suspend.
+#
 # The screen is locked first and the suspend requested once the lock screen
-# is up (or after LOCK_WAIT_MS).  Locking from logind's PrepareForSleep
+# is up (or after LOCK_WAIT_MS); with GNOME's screen lock turned off
+# (org.gnome.desktop.screensaver lock-enabled, a Tab9 Extras switch) it
+# suspends at once and waking goes straight back to the desktop.  Locking from logind's PrepareForSleep
 # instead stalled: the panel goes dark at once, GNOME's lock animation never
 # finishes on it, and gnome-shell's delay inhibitor ran into logind's 5 s
 # timeout on every suspend.
@@ -25,6 +40,7 @@ EVENT = struct.Struct('llHHi')
 EV_KEY, KEY_POWER = 1, 116
 LONG_MS = 700
 LOCK_WAIT_MS = 2000
+WAKE_GRACE_MS = 1000
 
 
 def find_device():
@@ -70,12 +86,53 @@ class PowerKey:
         self.timer = 0
         self.ignore_release = False
         self.lock_wait = 0
+        self.sleeping = False
+        self.resumed = 0.0
+        self.screensaver_settings = Gio.Settings.new('org.gnome.desktop.screensaver')
         self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM)
         self.session = Gio.bus_get_sync(Gio.BusType.SESSION)
+        self.display_off = False
+        self.display_on = 0.0
+        self.session.signal_subscribe(
+            'org.gnome.Mutter.DisplayConfig', 'org.freedesktop.DBus.Properties',
+            'PropertiesChanged', '/org/gnome/Mutter/DisplayConfig', None,
+            Gio.DBusSignalFlags.NONE, self.on_display_props)
+        try:
+            mode = self.session.call_sync(
+                'org.gnome.Mutter.DisplayConfig', '/org/gnome/Mutter/DisplayConfig',
+                'org.freedesktop.DBus.Properties', 'Get',
+                GLib.Variant('(ss)', ('org.gnome.Mutter.DisplayConfig', 'PowerSaveMode')),
+                None, Gio.DBusCallFlags.NONE, 1000, None).unpack()[0]
+            self.display_off = mode != 0
+        except GLib.Error:
+            pass
+        self.system.signal_subscribe(
+            'org.freedesktop.login1', 'org.freedesktop.login1.Manager',
+            'PrepareForSleep', '/org/freedesktop/login1', None,
+            Gio.DBusSignalFlags.NONE, self.on_prepare_for_sleep)
         GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, self.fd,
                               GLib.IOCondition.IN, self.on_input)
 
+    def on_display_props(self, bus, sender, path, iface, signal, args):
+        changed = args.unpack()[1]
+        if 'PowerSaveMode' not in changed:
+            return
+        off = changed['PowerSaveMode'] != 0
+        if self.display_off and not off:
+            self.display_on = time.monotonic()
+        self.display_off = off
+
+    def on_prepare_for_sleep(self, bus, sender, path, iface, signal, args):
+        self.sleeping = args.unpack()[0]
+        if not self.sleeping:
+            self.resumed = time.monotonic()
+
     def woke_by_this_key(self):
+        now = time.monotonic()
+        if self.sleeping or self.display_off or \
+                now - self.resumed < WAKE_GRACE_MS / 1000 or \
+                now - self.display_on < WAKE_GRACE_MS / 1000:
+            return True
         slept = asleep()
         if slept - self.asleep < 0.05:
             return False
@@ -98,7 +155,15 @@ class PowerKey:
         return True
 
     def pressed(self):
+        if self.lock_wait:
+            # Pressed again before the tablet went to sleep: stay awake.
+            print('press during lock: suspend cancelled', file=sys.stderr, flush=True)
+            GLib.source_remove(self.lock_wait)
+            self.lock_wait = 0
+            self.ignore_release = True
+            return
         if self.woke_by_this_key():
+            print('wake press dropped', file=sys.stderr, flush=True)
             self.ignore_release = True
             return
         self.cancel()
@@ -120,6 +185,9 @@ class PowerKey:
 
     def lock_then_suspend(self):
         if self.lock_wait:
+            return
+        if not self.screensaver_settings.get_boolean('lock-enabled'):
+            self.suspend()
             return
         try:
             if self.screensaver('GetActive').unpack()[0]:
