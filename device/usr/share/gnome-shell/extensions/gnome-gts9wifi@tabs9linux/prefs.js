@@ -8,6 +8,8 @@
 
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -63,9 +65,60 @@ export default class Gts9wifiPreferences extends ExtensionPreferences {
             groups.get(control.group).add(row);
         }
 
+        const boot = this._bootGroup();
+        if (boot)
+            page.add(boot);
         page.add(this._lockGroup());
         page.add(this._keyboardGroup());
         window.add(page);
+    }
+
+    // The boot animation gts9wifi-boot-animation plays: one of the videos in
+    // animations.list (id|label per line, written by the image build), saved
+    // as its id in /var/lib/gts9wifi/boot-animation, which the boot service
+    // reads.  The directory belongs to group video, as for the controls above.
+    _bootGroup() {
+        let lines;
+        try {
+            const [, bytes] = GLib.file_get_contents('/usr/share/gts9wifi/boot-animation/animations.list');
+            lines = new TextDecoder().decode(bytes).split('\n');
+        } catch {
+            return null;
+        }
+        const ids = [];
+        const labels = new Gtk.StringList();
+        for (const line of lines) {
+            const [id, label] = line.split('|');
+            if (!id)
+                continue;
+            ids.push(id);
+            labels.append(label || id);
+        }
+        if (ids.length === 0)
+            return null;
+
+        const choice = '/var/lib/gts9wifi/boot-animation';
+        let current = 'galaxy';
+        try {
+            current = new TextDecoder().decode(GLib.file_get_contents(choice)[1]).trim();
+        } catch {}
+
+        const group = new Adw.PreferencesGroup({title: _('Boot')});
+        const row = new Adw.ComboRow({
+            title: _('Boot animation'),
+            subtitle: _('Shown from the moment the screen comes on until the login screen.'),
+            model: labels,
+            selected: Math.max(0, ids.indexOf(current)),
+        });
+        row.connect('notify::selected', () => {
+            try {
+                GLib.file_set_contents(choice, `${ids[row.selected]}\n`);
+            } catch (e) {
+                logError(e, 'gts9wifi: cannot save the boot animation');
+            }
+        });
+        group.add(row);
+        return group;
     }
 
     // GNOME's own lock settings: lock-enabled covers the screen blanking after
