@@ -128,7 +128,7 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | Battery and charging | ✅ | **80 % charge limit and charge bypass** (Tab9 Extras app) |
 | Cameras (front, rear) | ✅ | libcamera + PipeWire, GNOME Snapshot |
 | Rear autofocus | ✅ | continuous AF on the DW9808 lens |
-| Hardware video | ✅ | iris VPU decode (H.264, HEVC, VP9) and encode (H.264, HEVC) in GStreamer apps |
+| Hardware video | ✅ | iris VPU decode (H.264, HEVC, VP9) and encode (H.264, HEVC) in GStreamer apps; H.264 and HEVC in Firefox |
 | Sensors | ✅ | auto-rotation, ambient light, compass |
 | Suspend / wake | ✅ | power key suspends and wakes instantly; hold for Restart / Power Off |
 | Fingerprint (under-display EL721) | ✅ | unlock, sudo, polkit; needs the calibration step above |
@@ -136,7 +136,13 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | `/vendor` | ✅ | mapped read-only from Android's `super` (firmware source) |
 | USB host, docks, DisplayPort | 🟡 | drivers from the Fedora port; not tested on Ubuntu yet — reports welcome |
 
-New in **v0.3.0** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.3.0.md)):
+New in **v0.4.0** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.0.md)):
+**Firefox** with hardware H.264/HEVC decoding on the video block (patched
+FFmpeg), Google sign-in and Android storage fixed in **Waydroid**, a new
+**black hole** boot animation (Galaxy still selectable in Tab9 Extras), and
+the screen no longer lights up before an idle suspend.
+
+v0.3.0 ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.3.0.md)) brought
 Android apps with **Waydroid** (GPU-accelerated), **PS5/PS4 Remote Play**
 with hardware decoding (chiaki-ng), a boot animation instead of kernel
 text, ~7 s faster boot, a stable Wi-Fi MAC address, power-key wake fix and
@@ -152,13 +158,14 @@ an option to wake without the password.
 | No charging-bypass UI | charge limit and bypass in the kernel (patch 0007) and in the UI |
 | SELinux permissive | not applicable: Ubuntu uses AppArmor, enabled |
 | `/vendor` not mounted | mounted read-only (dm-linear over `super`) |
-| Players decode video in software | GStreamer apps use the VPU (browsers still decode in software) |
+| Players decode video in software | GStreamer apps and Firefox (H.264/HEVC) use the VPU |
 | Weak 5 GHz on this unit | tuned board data put into the entry this chip actually loads |
 | Android data wiped on install | Android stays; Ubuntu is on the microSD |
 
 ## Known issues
 
-- **Browsers decode video in software** (no VA-API for the Qualcomm VPU).
+- **VP9/AV1 in Firefox decode in software** (YouTube's defaults; Firefox's
+  bundled FFmpeg has no V4L2 decoders). Chromium has no V4L2 decoder.
 - **After an Android update without the Magisk module**, `android-restore.zip`
   holds the *old* Android boot images: install the zip from Magisk and keep
   the card to refresh it.
@@ -169,15 +176,9 @@ an option to wake without the password.
 - Rare GPU fault when switching cameras quickly.
 - Linux 7.2.1–7.2.6 break Wi-Fi on this tablet; the kernel stays on 7.2.0.
 - No kernel updates through apt yet: a new release is a new image/zip.
-- **v0.3.0 Waydroid:** Android's internal storage does not mount (a "system
-  error" at the first launch) and the Google sign-in hangs at *Checking
-  info…*. Waydroid's vendor image declares an OMX codec service it does not
-  ship. Fixed after v0.3.0 by `gts9wifi-waydroid-omx-fix`; on v0.3.0 copy
-  [`device/usr/libexec/gts9wifi-waydroid-omx-fix`](device/usr/libexec/gts9wifi-waydroid-omx-fix)
-  to `/usr/libexec/` and
-  [`gts9wifi-omx-fix.conf`](device/etc/systemd/system/waydroid-container.service.d/gts9wifi-omx-fix.conf)
-  to `/etc/systemd/system/waydroid-container.service.d/`, then
-  `sudo systemctl daemon-reload && sudo systemctl restart waydroid-container`.
+- **v0.3.0 only:** Waydroid's Android storage does not mount and the Google
+  sign-in hangs; fixed in v0.4.0 (two files to copy on v0.3.0:
+  [release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.0.md#already-on-v030)).
 
 Open work and the full history: [KNOWN-ISSUES.md](docs/gts9wifi/KNOWN-ISSUES.md),
 [PORTING-LOG.md](docs/gts9wifi/PORTING-LOG.md).
