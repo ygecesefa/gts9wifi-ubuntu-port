@@ -36,6 +36,10 @@ rootfs=${ROOTFS_DIR:-$root/build/gts9wifi-rootfs}
 # leaves it out.
 chiaki=${GTS9WIFI_CHIAKI:-1}
 chiaki_bundle=${CHIAKI_BUNDLE:-$root/build/chiaki-ng/chiaki-ng-gts9wifi.flatpak}
+# Ubuntu's FFmpeg with the V4L2 M2M patches Firefox needs for hardware video
+# (packaging/ffmpeg/build-ffmpeg-debs.sh).
+ffmpeg_debs=${FFMPEG_DEB_DIR:-$root/build/gts9wifi-ffmpeg/out}
+ffmpeg_ver=${FFMPEG_DEB_VERSION:-6.1.1-3ubuntu5+gts9wifi2}
 suite=noble
 mirror=${UBUNTU_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
 hostname=gts9wifi
@@ -52,7 +56,9 @@ krel=$(cat "$kernel_out/kernel.release")
 for f in "$kernel_out/modules-root/lib/modules/$krel" "$firmware_tar" "$fedora/rootfs/overlay" "$sensor_tree" \
 	"$sensor_debs"/libssc_*.deb "$sensor_debs"/hexagonrpcd_*.deb "$sensor_debs"/iio-sensor-proxy_*.deb \
 	"$sensor_debs"/libcamera-gts9u_*.deb "$sensor_debs"/libspa-0.2-libcamera-gts9u_*.deb \
-	"$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$fp_out"/SHA256SUMS; do
+	"$sensor_debs"/libfprint-2-2_*+gts9wifi*.deb "$fp_out"/SHA256SUMS \
+	"$ffmpeg_debs"/libavcodec60_"$ffmpeg_ver"_arm64.deb "$ffmpeg_debs"/libavutil58_"$ffmpeg_ver"_arm64.deb \
+	"$ffmpeg_debs"/libswresample4_"$ffmpeg_ver"_arm64.deb; do
 	test -e "$f" || { echo "missing: $f" >&2; exit 1; }
 done
 [ "$chiaki" != 1 ] || [ -f "$chiaki_bundle" ] || { echo "missing: $chiaki_bundle (or GTS9WIFI_CHIAKI=0)" >&2; exit 1; }
@@ -418,6 +424,37 @@ echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ $
 	> "$rootfs/etc/apt/sources.list.d/waydroid.list"
 rootfs_net_leave
 apt_in_rootfs waydroid
+
+echo "== Firefox (Mozilla's .deb) with hardware video through the patched FFmpeg"
+# Ubuntu's firefox package only installs the snap, which brings its own
+# FFmpeg; Mozilla's .deb (packages.mozilla.org, key fingerprint
+# 35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3, pinned over Ubuntu's) decodes
+# H.264/HEVC with the system libavcodec.  That one is Ubuntu's 6.1.1 with
+# packaging/ffmpeg/patches (DRM PRIME frames from the V4L2 M2M decoders,
+# timestamps without a time base), pinned so an Ubuntu update of ffmpeg does
+# not silently replace it; rebuild against the new version then.
+# etc/firefox/policies turns hardware decoding on for every profile.
+mkdir -p "$rootfs/tmp/gts9wifi-debs"
+for p in libavcodec60 libavutil58 libswresample4; do
+	cp "$ffmpeg_debs/${p}_${ffmpeg_ver}_arm64.deb" "$rootfs/tmp/gts9wifi-debs/"
+done
+printf '%s\n' '# packaging/ffmpeg: V4L2 M2M patches for Firefox hardware video.' \
+	'Package: libavcodec60 libavutil58 libswresample4' "Pin: version 7:$ffmpeg_ver" 'Pin-Priority: 1001' \
+	> "$rootfs/etc/apt/preferences.d/gts9wifi-ffmpeg"
+apt_in_rootfs $(local_debs)
+rm -rf "$rootfs/tmp/gts9wifi-debs"
+rootfs_net_enter
+install -d -m 755 "$rootfs/etc/apt/keyrings"
+curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg -o "$rootfs/etc/apt/keyrings/packages.mozilla.org.asc"
+gpg --show-keys --with-colons "$rootfs/etc/apt/keyrings/packages.mozilla.org.asc" | \
+	grep -q '^fpr:::::::::35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3:' || { echo 'unexpected Mozilla key' >&2; exit 1; }
+echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" \
+	> "$rootfs/etc/apt/sources.list.d/mozilla.list"
+printf '%s\n' 'Package: *' 'Pin: origin packages.mozilla.org' 'Pin-Priority: 1000' \
+	> "$rootfs/etc/apt/preferences.d/mozilla"
+rootfs_net_leave
+apt_in_rootfs firefox
+chroot "$rootfs" dpkg-query -W -f='${Version}\n' firefox | grep -qv snap || { echo 'got the firefox snap package' >&2; exit 1; }
 
 echo "== drop firmware this tablet can never load (~260 MB)"
 # NVIDIA GPUs and Mellanox/Marvell switch ASICs are PCIe parts (no PCIe slot

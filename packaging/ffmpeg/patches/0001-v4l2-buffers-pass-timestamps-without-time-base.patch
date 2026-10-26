@@ -1,0 +1,39 @@
+From: gts9wifi port <gts9wifi@localhost>
+Subject: avcodec/v4l2_buffers: pass timestamps through when no time base is set
+
+v4l2_get_timebase() took avctx->pkt_timebase if its numerator was set and
+avctx->time_base otherwise.  A decoder whose caller sets neither (Firefox:
+it hands libavcodec packets with pts in microseconds and leaves both at
+their defaults, time_base = 0/1) then rescaled every input pts with 0/1
+(every OUTPUT buffer queued at timestamp 0) and every output timestamp with
+a zero denominator (every frame returned as AV_NOPTS_VALUE).  Firefox drops
+the hardware decoder after the first frame when that happens and falls back
+to software.
+
+Use V4L2's own time base (1/1000000) when neither is valid, so timestamps
+go through the device unchanged; a valid pkt_timebase or time_base is
+still used as before.  Check the denominator too.
+
+Forwarded: not yet
+Last-Update: 2026-10-27
+---
+--- a/libavcodec/v4l2_buffers.c
++++ b/libavcodec/v4l2_buffers.c
+@@ -52,9 +52,15 @@
+ {
+     V4L2m2mContext *s = buf_to_m2mctx(avbuf);
+ 
+-    if (s->avctx->pkt_timebase.num)
++    if (s->avctx->pkt_timebase.num && s->avctx->pkt_timebase.den)
+         return s->avctx->pkt_timebase;
+-    return s->avctx->time_base;
++    if (s->avctx->time_base.num && s->avctx->time_base.den)
++        return s->avctx->time_base;
++    /* Neither is set (a decoder's time_base defaults to 0/1): pass the
++     * timestamps through unchanged instead of rescaling to and from 0/1,
++     * which sent every packet at 0 and returned every frame as
++     * AV_NOPTS_VALUE. */
++    return v4l2_timebase;
+ }
+ 
+ static inline void v4l2_set_pts(V4L2Buffer *out, int64_t pts)
