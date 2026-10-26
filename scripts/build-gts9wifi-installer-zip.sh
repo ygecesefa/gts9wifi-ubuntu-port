@@ -57,7 +57,13 @@ sfdisk -d "$sd" | grep -q 'type=c' || { echo "$sd has no FAT GTS9W_BACK partitio
 cp "$repo/installer/install.sh" "$repo/installer/restore.sh" "$work/p/"
 cp "$bundle"/{boot,init_boot,vendor_boot,dtbo}.img "$work/p/"
 printf '%s (port %s)\n' "$version" "$(git -C "$repo" rev-parse --short HEAD)" > "$work/p/version.txt"
-(cd "$work/p" && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img install.sh restore.sh) \
+# The boot images are mostly zero padding up to their partition size: they
+# travel as .zst (the zip itself is stored) and install.sh unpacks them.
+for n in boot init_boot vendor_boot dtbo; do
+	zstd -19 -q -f "$work/p/$n.img" -o "$work/p/$n.img.zst"
+done
+(cd "$work/p" && sha256sum boot.img init_boot.img vendor_boot.img dtbo.img \
+	boot.img.zst init_boot.img.zst vendor_boot.img.zst dtbo.img.zst install.sh restore.sh) \
 	> "$work/p/SHA256SUMS"
 echo "$(sha256sum < "$sd.zst" | cut -d' ' -f1)  sd.img.zst" >> "$work/p/SHA256SUMS"
 echo "$raw_sha  sd.img" >> "$work/p/SHA256SUMS"
@@ -89,10 +95,10 @@ rm -f "$zip"
 	gts9wifi/version.txt="$work/p/version.txt" \
 	gts9wifi/install.sh="$work/p/install.sh" \
 	gts9wifi/restore.sh="$work/p/restore.sh" \
-	gts9wifi/boot.img="$work/p/boot.img" \
-	gts9wifi/init_boot.img="$work/p/init_boot.img" \
-	gts9wifi/vendor_boot.img="$work/p/vendor_boot.img" \
-	gts9wifi/dtbo.img="$work/p/dtbo.img" \
+	gts9wifi/boot.img.zst="$work/p/boot.img.zst" \
+	gts9wifi/init_boot.img.zst="$work/p/init_boot.img.zst" \
+	gts9wifi/vendor_boot.img.zst="$work/p/vendor_boot.img.zst" \
+	gts9wifi/dtbo.img.zst="$work/p/dtbo.img.zst" \
 	gts9wifi/sd.img.zst="$sd.zst"
 unzip -tq "$zip"
 unzip -l "$zip"

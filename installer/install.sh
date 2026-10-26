@@ -201,7 +201,7 @@ if [ $keep = 0 ]; then
 	ui "Copying the package to $(dirname $W) and verifying it..."
 	free_kb=$(df -k $(dirname $W) | tail -1 | tr -s ' ' | cut -d' ' -f4)
 	[ "${free_kb:-0}" -gt 2500000 ] || fail "Not enough space in $(dirname $W) (${free_kb} KB)"
-	files="sd.img.zst boot.img init_boot.img vendor_boot.img dtbo.img restore.sh"
+	files="sd.img.zst boot.img.zst init_boot.img.zst vendor_boot.img.zst dtbo.img.zst restore.sh"
 else
 	files="restore.sh"
 fi
@@ -211,6 +211,14 @@ done
 for f in $files; do
 	[ "$(sha $W/pay/$f)" = "$(want $f $W/pay/SHA256SUMS)" ] || fail "sha256 mismatch: $f"
 done
+# The boot images come compressed (mostly zero padding); unpack and check them.
+if [ $keep = 0 ]; then
+	for name in boot init_boot vendor_boot dtbo; do
+		$TOOL unzstd $W/pay/$name.img.zst $W/pay/$name.img >/dev/null || fail "Could not unpack $name.img"
+		rm -f $W/pay/$name.img.zst
+		[ "$(sha $W/pay/$name.img)" = "$(want $name.img $W/pay/SHA256SUMS)" ] || fail "sha256 mismatch: $name.img"
+	done
+fi
 raw_size=$(grep '^raw_size ' $W/pay/SHA256SUMS | cut -d' ' -f2)
 raw_sectors=$(grep '^raw_sectors ' $W/pay/SHA256SUMS | cut -d' ' -f2)
 raw_sha=$(want sd.img $W/pay/SHA256SUMS)

@@ -86,6 +86,9 @@ cleanup
 trap - EXIT
 
 echo "== compressing"
-zstd -T0 -10 -f -q "$out" -o "$out.zst"
+# -19 with a 128 MiB window: ~10 % smaller than -10 (the installer zip has
+# to stay under GitHub's 2 GiB per file).  --long=27 is the largest window
+# a default zstd decoder accepts, gts9w-tool's included.
+zstd -T0 -19 --long=27 -f -q "$out" -o "$out.zst"
 sha256sum "$out" "$out.zst" > "$out.SHA256SUMS"
 ls -l "$out" "$out.zst"

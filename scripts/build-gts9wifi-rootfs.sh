@@ -187,7 +187,8 @@ rootfs_net_enter() {
 rootfs_net_leave() {
 	rm -f "$rootfs/etc/resolv.conf"
 	[ "$saved" = 0 ] || mv "$rootfs/etc/resolv.conf.gts9wifi-build" "$rootfs/etc/resolv.conf"
-	for d in dev sys proc; do umount "$rootfs/$d"; done
+	# Flatpak's helpers can still hold /sys for a moment: detach lazily then.
+	for d in dev sys proc; do umount "$rootfs/$d" 2>/dev/null || umount -l "$rootfs/$d"; done
 }
 
 apt_in_rootfs() {
@@ -386,10 +387,18 @@ if [ "$chiaki" = 1 ]; then
 	install -m 0644 "$chiaki_bundle" "$rootfs/tmp/chiaki-ng-gts9wifi.flatpak"
 	rootfs_net_enter
 	chroot "$rootfs" flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+	# Only English and Turkish translations of the runtime: all languages
+	# took 900 MB and pushed the installer zip past GitHub's 2 GiB limit.
+	chroot "$rootfs" flatpak config --system --set languages 'en;tr'
+	# bwrap cannot run Flatpak's triggers in a chroot ("Failed to make /
+	# slave"); they only refresh caches, which the first boot redoes.
+	# A rebuild (SKIP_BOOTSTRAP=1) replaces the app; its runtime stays.
+	chroot "$rootfs" flatpak uninstall --system -y --noninteractive io.github.streetpea.Chiaki4deck >/dev/null 2>&1 || true
 	chroot "$rootfs" flatpak install --system -y --noninteractive /tmp/chiaki-ng-gts9wifi.flatpak
 	rootfs_net_leave
 	rm -f "$rootfs/tmp/chiaki-ng-gts9wifi.flatpak"
-	chroot "$rootfs" flatpak info --system io.github.streetpea.Chiaki4deck | grep -E 'Version|Origin'
+	test -d "$rootfs/var/lib/flatpak/app/io.github.streetpea.Chiaki4deck/current" || {
+		echo 'chiaki-ng not installed' >&2; exit 1; }
 fi
 
 echo "== Waydroid (Android apps; the Android image is downloaded on first launch)"
