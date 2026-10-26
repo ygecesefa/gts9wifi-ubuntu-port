@@ -419,6 +419,16 @@ echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ $
 rootfs_net_leave
 apt_in_rootfs waydroid
 
+echo "== drop firmware this tablet can never load (~260 MB)"
+# NVIDIA GPUs and Mellanox/Marvell switch ASICs are PCIe parts (no PCIe slot
+# here, and no eGPU on arm64).  Removing them also removes the
+# linux-firmware metapackage, nothing else; the tablet's own firmware is not
+# packaged (backups/firmware).  Then whatever only Ubuntu's own libcamera
+# and Plymouth pulled in.
+chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq \
+	linux-firmware-nvidia-graphics linux-firmware-mellanox-spectrum linux-firmware-marvell-prestera
+chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -qq
+
 echo "== 4/6 test user '$user'"
 if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
 	chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$user" 2>/dev/null || \
