@@ -10,11 +10,14 @@
 // from the Extensions app.  At runtime it helps the on-screen keyboard:
 // oskFocus.js opens it for touch-focused text fields of Chromium-based apps,
 // keyboardButton.js adds a floating button for apps that never ask for it.
+// sleepWarning.js keeps gsd-power's "Automatic suspend" warning from
+// lighting the dark screen (which kept the tablet from ever suspending).
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {KeyboardButton} from './keyboardButton.js';
 import {OskFocus} from './oskFocus.js';
+import {SleepWarning} from './sleepWarning.js';
 
 export default class Gts9wifiExtension extends Extension {
     enable() {
@@ -22,9 +25,13 @@ export default class Gts9wifiExtension extends Extension {
         this._oskFocus.enable();
         this._keyboardButton = new KeyboardButton(this.getSettings());
         this._keyboardButton.enable();
+        this._sleepWarning = new SleepWarning();
+        this._sleepWarning.enable();
     }
 
     disable() {
+        this._sleepWarning?.disable();
+        this._sleepWarning = null;
         this._keyboardButton?.disable();
         this._keyboardButton = null;
         this._oskFocus?.disable();

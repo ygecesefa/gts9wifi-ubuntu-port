@@ -9,7 +9,7 @@
     "49",
     "50"
   ],
-  "version": 5,
+  "version": 6,
   "settings-schema": "org.gnome.shell.extensions.gts9wifi",
   "session-modes": [
     "user",
