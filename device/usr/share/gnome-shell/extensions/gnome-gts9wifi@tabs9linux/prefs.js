@@ -98,7 +98,7 @@ export default class Gts9wifiPreferences extends ExtensionPreferences {
             return null;
 
         const choice = '/var/lib/gts9wifi/boot-animation';
-        let current = 'galaxy';
+        let current = 'blackhole';
         try {
             current = new TextDecoder().decode(GLib.file_get_contents(choice)[1]).trim();
         } catch {}

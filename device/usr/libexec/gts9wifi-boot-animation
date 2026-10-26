@@ -1,5 +1,5 @@
 #!/bin/sh
-# Boot animation: play the video chosen in Tab9 Extras (galaxy by default)
+# Boot animation: play the video chosen in Tab9 Extras (black hole by default)
 # from /usr/share/gts9wifi/boot-animation on the panel until GDM starts.
 # Just before, GDM runs this with --stop
 # (gdm.service.d/gts9wifi-boot-animation.conf): it lets the animation play
@@ -15,14 +15,14 @@ set -eu
 
 DIR=/usr/share/gts9wifi/boot-animation
 # The animation picked in Tab9 Extras (an id from $DIR/animations.list);
-# galaxy when nothing or something unknown is saved.
+# blackhole when nothing or something unknown is saved.
 CHOICE=/var/lib/gts9wifi/boot-animation
 STAMP=/run/gts9wifi-boot-animation.started
 MIN_SECONDS=5
 
 id=$(head -n1 "$CHOICE" 2>/dev/null | tr -cd 'a-z0-9-') || id=
-VIDEO=$DIR/${id:-galaxy}.mp4
-[ -f "$VIDEO" ] || VIDEO=$DIR/galaxy.mp4
+VIDEO=$DIR/${id:-blackhole}.mp4
+[ -f "$VIDEO" ] || VIDEO=$DIR/blackhole.mp4
 
 if [ "${1:-}" = --stop ]; then
 	if [ -f "$STAMP" ] && systemctl -q is-active gts9wifi-boot-animation.service; then

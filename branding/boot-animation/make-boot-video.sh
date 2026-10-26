@@ -5,7 +5,7 @@
 #   -> DEST_DIR/usr/share/gts9wifi/boot-animation/{ID.mp4,animations.list}
 #
 # gts9wifi-boot-animation.service plays the one chosen in Tab9 Extras
-# (/var/lib/gts9wifi/boot-animation, default galaxy) from ~4 s into the boot
+# (/var/lib/gts9wifi/boot-animation, default blackhole) from ~4 s into the boot
 # until GDM takes the screen, at least 5 s.  Each source is cut to start
 # where those first seconds look best, scaled here, once, to 2560x1440
 # (Lanczos plus a light unsharp mask: sharper than the display controller's
@@ -27,8 +27,8 @@
 set -euo pipefail
 
 ANIMATIONS='
-galaxy|Galaxy|2.5|0
 blackhole|Black hole|3.5|10
+galaxy|Galaxy|2.5|0
 '
 
 here=$(cd "$(dirname "$0")" && pwd)
