@@ -407,7 +407,9 @@ echo "== Waydroid (Android apps; the Android image is downloaded on first launch
 # the image: the first launch asks Vanilla or GApps and downloads ~1 GB
 # (~3 GB unpacked).  This tablet's part: binder.devices in the cmdline
 # (anbox-* nodes, apart from the fingerprint stack's vndbinder) and
-# etc/systemd/system/waydroid-container.service.d (hides the host /vendor).
+# etc/systemd/system/waydroid-container.service.d (hides the host /vendor;
+# hides the OMX HAL the vendor image declares but does not ship,
+# usr/libexec/gts9wifi-waydroid-omx-fix).
 rootfs_net_enter
 curl -fsSL https://repo.waydro.id/waydroid.gpg -o "$rootfs/usr/share/keyrings/waydroid.gpg"
 gpg --show-keys --with-colons "$rootfs/usr/share/keyrings/waydroid.gpg" | \

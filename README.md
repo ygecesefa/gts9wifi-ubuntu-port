@@ -169,7 +169,15 @@ an option to wake without the password.
 - Rare GPU fault when switching cameras quickly.
 - Linux 7.2.1–7.2.6 break Wi-Fi on this tablet; the kernel stays on 7.2.0.
 - No kernel updates through apt yet: a new release is a new image/zip.
-- Waydroid (Android apps in Ubuntu) is not set up yet.
+- **v0.3.0 Waydroid:** Android's internal storage does not mount (a "system
+  error" at the first launch) and the Google sign-in hangs at *Checking
+  info…*. Waydroid's vendor image declares an OMX codec service it does not
+  ship. Fixed after v0.3.0 by `gts9wifi-waydroid-omx-fix`; on v0.3.0 copy
+  [`device/usr/libexec/gts9wifi-waydroid-omx-fix`](device/usr/libexec/gts9wifi-waydroid-omx-fix)
+  to `/usr/libexec/` and
+  [`gts9wifi-omx-fix.conf`](device/etc/systemd/system/waydroid-container.service.d/gts9wifi-omx-fix.conf)
+  to `/etc/systemd/system/waydroid-container.service.d/`, then
+  `sudo systemctl daemon-reload && sudo systemctl restart waydroid-container`.
 
 Open work and the full history: [KNOWN-ISSUES.md](docs/gts9wifi/KNOWN-ISSUES.md),
 [PORTING-LOG.md](docs/gts9wifi/PORTING-LOG.md).

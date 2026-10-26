@@ -1,0 +1,52 @@
+#!/bin/sh
+# Waydroid's arm64 vendor image (MAINLINE) declares the OMX codec HAL,
+# android.hardware.media.omx@1.0 (IOmx, IOmxStore), in its VINTF manifest but
+# ships no OMX service.  Android's media server asks hwservicemanager for
+# IOmxStore when it builds the codec list, and a HAL that is declared but
+# never registered is waited for forever.  MediaProvider calls into the
+# media server while it starts (TranscodeHelperImpl -> MediaCodec), hangs,
+# gets killed as an ANR every minute or two, and internal storage
+# (/storage/emulated/0) is never mounted.  Visible effects: a "system error"
+# at the first launch, apps that crash on storage, and the Google sign-in
+# stuck at "Checking info..." ("Something went wrong").
+#
+# Fix, before the container starts (waydroid-container.service.d): put a
+# copy of the vendor manifest without the OMX entry into Waydroid's overlay
+# (/var/lib/waydroid/overlay, mounted over the image when mount_overlays is
+# on, the default).  hwservicemanager then answers "not declared" at once and
+# the media server goes on with Codec2 (media.swcodec).  The images
+# themselves are not touched; deleting the overlay file undoes it.  Nothing is
+# done when the image has no OMX entry or does ship an OMX service, so a
+# fixed vendor image from Waydroid makes this a no-op.
+set -eu
+
+IMAGE=/var/lib/waydroid/images/vendor.img
+OUT=/var/lib/waydroid/overlay/vendor/etc/vintf/manifest.xml
+
+[ -f "$IMAGE" ] || exit 0
+
+mnt=$(mktemp -d /run/gts9wifi-waydroid-vendor.XXXXXX)
+trap 'umount "$mnt" 2>/dev/null; rmdir "$mnt"' EXIT
+mount -o ro,loop "$IMAGE" "$mnt"
+
+src=$mnt/etc/vintf/manifest.xml
+if ! grep -q '<name>android.hardware.media.omx</name>' "$src" ||
+	ls "$mnt"/bin/hw/*omx* "$mnt"/bin/hw/*media.codec* >/dev/null 2>&1; then
+	# Nothing to fix (any more): drop an overlay copy made from an older image.
+	rm -f "$OUT"
+	exit 0
+fi
+
+tmp=$(mktemp)
+python3 - "$src" "$tmp" <<'EOF'
+import re, sys
+s = open(sys.argv[1]).read()
+s, n = re.subn(r'\s*<hal format="hidl">\s*<name>android\.hardware\.media\.omx</name>.*?</hal>',
+               '', s, flags=re.S)
+if n != 1:
+    sys.exit(f"expected one OMX entry, found {n}")
+open(sys.argv[2], "w").write(s)
+EOF
+install -D -m 644 "$tmp" "$OUT"
+rm -f "$tmp"
+echo "vendor manifest without the OMX HAL -> $OUT"
