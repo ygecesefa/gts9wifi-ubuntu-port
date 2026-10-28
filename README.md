@@ -251,21 +251,29 @@ data or need to reflash your tablet.
 
 This port would not exist without the work of:
 
-- **[nacht20-de](https://github.com/nacht20-de/gts9wifi-fedora-linux)**
-  (nacht18 on XDA) — the Fedora port for this very tablet: the mainline kernel
+- **@nacht20-de** ([gts9wifi-fedora-linux](https://github.com/nacht20-de/gts9wifi-fedora-linux),
+  nacht18 on XDA) — the Fedora port for this very tablet: the mainline kernel
   recipe, the X710 drivers and device tree, the device services and the
   firmware research. The kernel side here starts from it.
-- **[agcarbajo](https://github.com/agcarbajo/ubuntu-galaxy-tab-s9-ultra)** —
+- **@agcarbajo** ([ubuntu-galaxy-tab-s9-ultra](https://github.com/agcarbajo/ubuntu-galaxy-tab-s9-ultra)) —
   the Ubuntu port for the S9 Ultra; this repository is a fork of it. Build
   tooling, SM8550 work, libcamera autofocus, sensors, mutter and the
   fingerprint stack come from there.
-- **Azkali** — fellow Tab S9 porter, whose firmware research helped the
+- **@Azkali** ([gts9wifi-firmware](https://github.com/Azkali/gts9wifi-firmware)) —
+  fellow Tab S9 porter, whose mainline tree and firmware research helped the
   Fedora port this one builds on.
-- **[rainbowdashh](https://github.com/rainbowdashh/android_device_samsung_gts9wifi)** —
-  the gts9wifi TWRP device tree and partition map.
-- **osm0sis** — AnyKernel3, the model for the recovery zips' loader layout.
-- **topjohnwu** — Magisk and its module format; the **KernelSU** project for
-  the module WebUI API.
+- **@rainbowdashh** ([android_device_samsung_gts9wifi](https://github.com/rainbowdashh/android_device_samsung_gts9wifi)) —
+  the gts9wifi TWRP device tree and partition map; the base of the OrangeFox
+  recovery.
+- **@lrusak** (Lukas Rusak) and [LibreELEC](https://github.com/LibreELEC/LibreELEC.tv) —
+  the FFmpeg V4L2 M2M DRM PRIME series behind Firefox's hardware video
+  ([packaging/ffmpeg](packaging/ffmpeg/)).
+- **@streetpea** ([chiaki-ng](https://github.com/streetpea/chiaki-ng)) —
+  PS4/PS5 Remote Play, patched here for iris ([packaging/chiaki-ng](packaging/chiaki-ng/)).
+- **@osm0sis** — AnyKernel3, the model for the recovery zips' loader layout.
+- **@topjohnwu** — Magisk and its module format; **@tiann** and the KernelSU
+  project for the module WebUI API.
+- [Waydroid](https://github.com/waydroid) — Android apps on the tablet.
 - The mainline Linux Qualcomm (linux-arm-msm), Mesa Freedreno/Turnip,
   libcamera, postmarketOS (hexagonrpcd, libssc) and Ubuntu communities.
 
