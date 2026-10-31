@@ -1,0 +1,20 @@
+#!/bin/sh
+# Magisk inside Waydroid, when the image ships it (scripts/add-waydroid-magisk.sh
+# staged it in /usr/share/gts9wifi/waydroid-magisk; public images do not).
+#
+# Before the container starts (waydroid-container.service.d): copy the staged
+# files into Waydroid's overlay when they are not there, which is after the
+# first `waydroid init` (with images shipped in the system it deletes the
+# overlay).  Files already there are left alone, so a Magisk updated from
+# its own app is kept.  Without the staged files this does nothing.
+set -eu
+
+SRC=/usr/share/gts9wifi/waydroid-magisk/overlay
+OVERLAY=/var/lib/waydroid/overlay
+
+[ -d "$SRC" ] || exit 0
+[ -f /var/lib/waydroid/waydroid.cfg ] || exit 0
+[ -e "$OVERLAY/system/etc/init/magisk/magisk64" ] && exit 0
+
+mkdir -p "$OVERLAY"
+cp -a "$SRC/." "$OVERLAY/"

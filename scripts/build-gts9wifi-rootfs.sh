@@ -429,6 +429,10 @@ apt_in_rootfs waydroid
 if [ "${WAYDROID_GAPPS:-0}" = 1 ]; then
 	"$repo/scripts/add-waydroid-images.sh" "$rootfs"
 fi
+# WAYDROID_MAGISK=1: Magisk (Delta) inside Waydroid (scripts/add-waydroid-magisk.sh).
+if [ "${WAYDROID_MAGISK:-0}" = 1 ]; then
+	"$repo/scripts/add-waydroid-magisk.sh" "$rootfs"
+fi
 
 echo "== Firefox (Mozilla's .deb) with hardware video through the patched FFmpeg"
 # Ubuntu's firefox package only installs the snap, which brings its own
