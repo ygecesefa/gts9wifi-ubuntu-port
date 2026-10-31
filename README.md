@@ -133,8 +133,15 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 | Suspend / wake | ✅ | power key suspends and wakes instantly; hold for Restart / Power Off |
 | Fingerprint (under-display EL721) | ✅ | unlock, sudo, polkit; needs the calibration step above |
 | On-screen keyboard | ✅ | GTK, Chromium, Firefox; floating keyboard button for X11 apps |
-| `/vendor` | ✅ | mapped read-only from Android's `super` (firmware source) |
+| `/vendor` | ✅ | mapped read-only from Android's `super` (firmware source); ext4 or erofs |
 | USB host, docks, DisplayPort | 🟡 | drivers from the Fedora port; not tested on Ubuntu yet — reports welcome |
+
+> ⚠️ **Do not accept GNOME's offer to upgrade to Ubuntu 26.04**: it replaces
+> the packages rebuilt for this tablet (cameras, fingerprint, Waydroid,
+> Firefox hardware video stop working). v0.4.1 turns the offer off; on
+> v0.4.0 run `sudo sed -i 's/^Prompt=.*/Prompt=never/' /etc/update-manager/release-upgrades`.
+> **v0.4.1** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.1.md)) also
+> supports Android ROMs with erofs partitions (HyperOS ports).
 
 New in **v0.4.0** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.0.md)):
 **Firefox** with hardware H.264/HEVC decoding on the video block (patched

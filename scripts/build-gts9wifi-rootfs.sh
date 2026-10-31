@@ -424,6 +424,11 @@ echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ $
 	> "$rootfs/etc/apt/sources.list.d/waydroid.list"
 rootfs_net_leave
 apt_in_rootfs waydroid
+# WAYDROID_GAPPS=1: the GApps images go into the image (no download, but
+# ~3 GB more and an installer zip over GitHub's 2 GiB file limit).
+if [ "${WAYDROID_GAPPS:-0}" = 1 ]; then
+	"$repo/scripts/add-waydroid-images.sh" "$rootfs"
+fi
 
 echo "== Firefox (Mozilla's .deb) with hardware video through the patched FFmpeg"
 # Ubuntu's firefox package only installs the snap, which brings its own

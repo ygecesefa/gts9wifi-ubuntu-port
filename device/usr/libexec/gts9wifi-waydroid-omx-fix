@@ -20,7 +20,11 @@
 # fixed vendor image from Waydroid makes this a no-op.
 set -eu
 
-IMAGE=/var/lib/waydroid/images/vendor.img
+# Downloaded images live in /var/lib/waydroid/images; images shipped with
+# the system (/usr/share/waydroid-extra/images) are used in place, and
+# waydroid.cfg records which.
+images=$(sed -n 's/^images_path *= *//p' /var/lib/waydroid/waydroid.cfg 2>/dev/null)
+IMAGE=${images:-/var/lib/waydroid/images}/vendor.img
 OUT=/var/lib/waydroid/overlay/vendor/etc/vintf/manifest.xml
 
 [ -f "$IMAGE" ] || exit 0
