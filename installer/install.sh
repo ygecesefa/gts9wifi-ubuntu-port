@@ -162,7 +162,9 @@ ui "=============================================="
 
 # ---- 1. checks ----------------------------------------------------------
 dev=$(getprop ro.product.device)
-case "$dev $(getprop ro.build.product) $(getprop ro.boot.hardware.sku 2>/dev/null)" in
+# ro.product.vendor.device too: ROMs ported from other devices (HyperOS)
+# may rename the system side, the vendor image stays Samsung's.
+case "$dev $(getprop ro.build.product) $(getprop ro.boot.hardware.sku 2>/dev/null) $(getprop ro.product.vendor.device)" in
 	*gts9wifi*) ;;
 	*) fail "This zip is only for the SM-X710 (gts9wifi) (device: $dev)" ;;
 esac

@@ -1,0 +1,22 @@
+# gts9wifi: never offer an Ubuntu release upgrade.
+# This image carries locally rebuilt packages built for 24.04 (libcamera,
+# PipeWire camera plugin, libfprint, FFmpeg, mutter, sensors).  Upgrading to
+# 26.04 replaced them with Ubuntu's own and broke the cameras, the
+# fingerprint reader, Waydroid and Firefox's hardware video (2026-10-31).
+# A newer Ubuntu comes as a new release of this image instead.
+# Default behavior for the release upgrader.
+
+[DEFAULT]
+Prompt=never
+# Default prompting and upgrade behavior, valid options:
+#
+#  never  - Never check for, or allow upgrading to, a new release.
+#  normal - Check to see if a new release is available.  If more than one new
+#           release is found, the release upgrader will attempt to upgrade to
+#           the supported release that immediately succeeds the
+#           currently-running release.
+#  lts    - Check to see if a new LTS release is available.  The upgrader
+#           will attempt to upgrade to the first LTS release available after
+#           the currently-running one.  Note that if this option is used and
+#           the currently-running release is not itself an LTS release the
+#           upgrader will assume prompt was meant to be normal.

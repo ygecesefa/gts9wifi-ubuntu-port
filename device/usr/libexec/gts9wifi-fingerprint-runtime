@@ -50,8 +50,12 @@ def system_root():
         subprocess.run(['/usr/libexec/gts9wifi-android-parts', 'map', 'system'],
                        check=True)
     SYSTEM_MNT.mkdir(mode=0o700, exist_ok=True)
-    subprocess.run(['mount', '-o', 'ro,noload,nodev,nosuid,noexec',
-                    '/dev/mapper/system', str(SYSTEM_MNT)], check=True)
+    # ext4 (noload: never replay a journal) or erofs, which has no noload.
+    fstype = subprocess.run(['blkid', '-s', 'TYPE', '-o', 'value', '/dev/mapper/system'],
+                            capture_output=True, text=True).stdout.strip()
+    opts = 'ro,nodev,nosuid,noexec' + (',noload' if fstype == 'ext4' else '')
+    subprocess.run(['mount', '-o', opts, '/dev/mapper/system', str(SYSTEM_MNT)],
+                   check=True)
     return root
 
 

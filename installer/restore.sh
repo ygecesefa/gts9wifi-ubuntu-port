@@ -55,7 +55,7 @@ ui "=============================================="
 ui " $title - Galaxy Tab S9 Wi-Fi (SM-X710)"
 ui "=============================================="
 dev=$(getprop ro.product.device)
-case "$dev $(getprop ro.build.product)" in
+case "$dev $(getprop ro.build.product) $(getprop ro.product.vendor.device)" in
 	*gts9wifi*) ;;
 	*) fail "This zip is only for the SM-X710 (gts9wifi) (device: $dev)" ;;
 esac
