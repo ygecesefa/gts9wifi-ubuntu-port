@@ -23,7 +23,8 @@ set -eu
 # Downloaded images live in /var/lib/waydroid/images; images shipped with
 # the system (/usr/share/waydroid-extra/images) are used in place, and
 # waydroid.cfg records which.
-images=$(sed -n 's/^images_path *= *//p' /var/lib/waydroid/waydroid.cfg 2>/dev/null)
+# (No waydroid.cfg before the first init: nothing to fix yet.)
+images=$(sed -n 's/^images_path *= *//p' /var/lib/waydroid/waydroid.cfg 2>/dev/null) || exit 0
 IMAGE=${images:-/var/lib/waydroid/images}/vendor.img
 OUT=/var/lib/waydroid/overlay/vendor/etc/vintf/manifest.xml
 
