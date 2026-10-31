@@ -1,0 +1,19 @@
+#!/bin/sh
+# Turn off wpa_supplicant's background scan on Wi-Fi connections.
+#
+# When the router uses one name on several APs or bands (2.4 + 5 GHz) and
+# the signal is under -65 dBm, NetworkManager has wpa_supplicant scan for a
+# better AP every 30 s ("simple:30:-65:300").  On this tablet each scan
+# visits every 2.4/5/6 GHz channel for ~7 s, and the connection stalls for
+# it: pings to the router went from ~4 ms to 50-220 ms every ~35 s, the
+# stutter in game streaming (chiaki-ng).  NetworkManager has no setting for
+# it, so this clears the network's bgscan once it is up; wpa_supplicant
+# applies that at once.  The tablet still changes AP when the connection is
+# lost, only not while it works.  To keep roaming, delete this file.
+iface=$1
+action=$2
+[ "$action" = up ] || exit 0
+case "$iface" in wl*) ;; *) exit 0 ;; esac
+id=$(wpa_cli -i "$iface" status 2>/dev/null | sed -n 's/^id=//p')
+[ -n "$id" ] || exit 0
+wpa_cli -i "$iface" set_network "$id" bgscan '""' >/dev/null
