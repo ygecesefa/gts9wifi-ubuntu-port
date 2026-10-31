@@ -11,7 +11,9 @@
 # from these at once.  gts9wifi-waydroid-omx-fix follows waydroid.cfg's
 # images_path, so the OMX fix applies to them too.
 #
-# Images: the newest arm64 LineageOS 20 GAPPS system and MAINLINE vendor
+# Images: the newest arm64_only LineageOS 20 GAPPS system and MAINLINE vendor
+# (this CPU has no AArch32: the plain arm64 images carry 32-bit vendor
+# binaries, and Android reboots at once on boringssl_self_test32),
 # from Waydroid's OTA server (ota.waydro.id, the same Waydroid downloads),
 # checked against the sha256 the OTA server lists.  ~1.4 GB zipped, ~3 GB
 # unpacked: this does not fit the 2 GiB a GitHub release file may have, so
@@ -28,7 +30,7 @@ dest=$rootfs/usr/share/waydroid-extra/images
 test -d "$rootfs/usr/lib/waydroid" || { echo "no Waydroid in $rootfs" >&2; exit 1; }
 mkdir -p "$dl"
 
-for t in system/lineage/waydroid_arm64/GAPPS vendor/waydroid_arm64/MAINLINE; do
+for t in system/lineage/waydroid_arm64_only/GAPPS vendor/waydroid_arm64_only/MAINLINE; do
 	curl -fsS "https://ota.waydro.id/$t.json" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)["response"][0]
