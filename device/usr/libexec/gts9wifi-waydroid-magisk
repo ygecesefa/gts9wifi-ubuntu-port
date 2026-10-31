@@ -7,6 +7,11 @@
 # first `waydroid init` (with images shipped in the system it deletes the
 # overlay).  Files already there are left alone, so a Magisk updated from
 # its own app is kept.  Without the staged files this does nothing.
+#
+# Install only the Magisk Delta app it brings (io.github.huskydg.magisk):
+# the official Magisk app's "Install" looks for a boot partition, fails, and
+# leaves empty copies of these files in Waydroid's writable layer
+# (/var/lib/waydroid/overlay_rw) that hide the real ones.
 set -eu
 
 SRC=/usr/share/gts9wifi/waydroid-magisk/overlay
@@ -14,7 +19,20 @@ OVERLAY=/var/lib/waydroid/overlay
 
 [ -d "$SRC" ] || exit 0
 [ -f /var/lib/waydroid/waydroid.cfg ] || exit 0
-[ -e "$OVERLAY/system/etc/init/magisk/magisk64" ] && exit 0
 
-mkdir -p "$OVERLAY"
-cp -a "$SRC/." "$OVERLAY/"
+if [ ! -e "$OVERLAY/system/etc/init/magisk/magisk64" ]; then
+	mkdir -p "$OVERLAY"
+	cp -a "$SRC/." "$OVERLAY/"
+fi
+
+# Magisk's own copy in Android's /data (waydroid_script's "additional
+# setup"); without util_functions.sh there, every module zip stops with
+# "Please install Magisk v20.4+!".  Android's /data is the session user's
+# ~/.local/share/waydroid/data, there once Waydroid has started once.
+for adb in /home/*/.local/share/waydroid/data/adb; do
+	[ -d "$adb" ] || continue
+	[ -f "$adb/magisk/util_functions.sh" ] && continue
+	rm -rf "$adb/magisk"
+	cp -a "$SRC/system/etc/init/magisk" "$adb/magisk"
+	chown -R 0:0 "$adb/magisk"
+done
