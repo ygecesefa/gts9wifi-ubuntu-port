@@ -140,6 +140,8 @@ Legend: ✅ works, tested on the tablet · 🟡 partial or not retested · ❌ n
 > the packages rebuilt for this tablet (cameras, fingerprint, Waydroid,
 > Firefox hardware video stop working). v0.4.1 turns the offer off; on
 > v0.4.0 run `sudo sed -i 's/^Prompt=.*/Prompt=never/' /etc/update-manager/release-upgrades`.
+> **v0.4.2** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.2.md)) ends a Wi-Fi
+> stutter every ~35 s (background scans) that game streaming showed.
 > **v0.4.1** ([release notes](docs/gts9wifi/RELEASE-NOTES-v0.4.1.md)) also
 > supports Android ROMs with erofs partitions (HyperOS ports).
 
