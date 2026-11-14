@@ -12,7 +12,8 @@
 #   1. Flathub's own manifest for io.github.streetpea.Chiaki4deck (the
 #      chiaki-ng build users get from Flathub).
 #   2. Its FFmpeg is built with --disable-all and only software and
-#      VAAPI/Vulkan decoders: add the V4L2 M2M decoders.
+#      VAAPI/Vulkan decoders: add the V4L2 M2M decoders, and our patches in
+#      packaging/chiaki-ng/ffmpeg-patches/ (dmabuf output).
 #   3. chiaki-ng gets our patches in packaging/chiaki-ng/patches/.
 set -euo pipefail
 
@@ -34,9 +35,12 @@ git -C "$fh" checkout -q "$fh_commit"
 
 echo "== 2/3 V4L2 M2M decoders in FFmpeg, chiaki-ng patches"
 cp "$here"/patches/*.patch "$fh/"
-python3 - "$fh/$app.yaml" "$here"/patches/*.patch <<'PY'
+mkdir -p "$fh/ffmpeg-gts9wifi"
+cp "$here"/ffmpeg-patches/*.patch "$fh/ffmpeg-gts9wifi/"
+python3 - "$fh/$app.yaml" "$here"/patches/*.patch -- "$here"/ffmpeg-patches/*.patch <<'PY'
 import os, sys, yaml
-path, patches = sys.argv[1], sys.argv[2:]
+path, args = sys.argv[1], sys.argv[2:]
+patches, ffmpeg_patches = args[:args.index('--')], args[args.index('--') + 1:]
 m = yaml.safe_load(open(path))
 mods = {x['name']: x for x in m['modules'] if isinstance(x, dict)}
 mods['ffmpeg']['config-opts'] += [
@@ -44,6 +48,8 @@ mods['ffmpeg']['config-opts'] += [
     '--enable-decoder=h264_v4l2m2m',
     '--enable-decoder=hevc_v4l2m2m',
 ]
+# After Flathub's own FFmpeg patch (ours was made on top of it).
+mods['ffmpeg']['sources'] += [{'type': 'patch', 'path': 'ffmpeg-gts9wifi/' + os.path.basename(p)} for p in ffmpeg_patches]
 mods['chiaki-ng']['sources'] += [{'type': 'patch', 'path': os.path.basename(p)} for p in patches]
 # The current KDE SDK's CMake installs json-c and miniupnpc under /app/lib64
 # on aarch64, where chiaki-ng's pkg-config lookup does not search.

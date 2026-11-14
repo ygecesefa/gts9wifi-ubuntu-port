@@ -1,6 +1,9 @@
 /* Drives chiaki-ng's real lib/src/ffmpegdecoder.c (patched) like the
  * stream does: SPS/PPS as a unit of its own, then one access unit per
- * call, 60 fps; counts frames and checks luma.  Stubs for the rest of
+ * call, 60 fps; counts frames and checks luma.  DRM PRIME frames (patch
+ * 0004, FFmpeg with the DRM PRIME patch): prints the first frame's dmabuf
+ * layout and reads luma through av_hwframe_transfer_data, the path the GUI
+ * takes when zero copy is off; CHIAKI_V4L2M2M_COPY=1 gives NV12 copies.  Stubs for the rest of
  * libchiaki.  Build next to a patched lib/src/ffmpegdecoder.c and
  * lib/include/chiaki/*.h (config.h: #define CHIAKI_EXPORT), against the
  * Flatpak's FFmpeg 7.1:
@@ -8,6 +11,8 @@
  *     $(pkg-config --static --cflags --libs libavcodec libavutil) -lpthread
  *   ./drive ps.h264 v4l2m2m */
 #include <chiaki/ffmpegdecoder.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_drm.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +31,7 @@ void chiaki_log(ChiakiLog *log, ChiakiLogLevel level, const char *fmt, ...)
 uint64_t chiaki_time_now_monotonic_us(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000000ull + t.tv_nsec / 1000; }
 const char *chiaki_codec_name(ChiakiCodec c) { return "codec"; }
 
-static int frames, green;
+static int frames, green, drm_frames, transfer_failed;
 static void cb(ChiakiFfmpegDecoder *d, void *u)
 {
 	int32_t lost;
@@ -34,12 +39,37 @@ static void cb(ChiakiFfmpegDecoder *d, void *u)
 	if(!f.frame)
 		return;
 	frames++;
+	AVFrame *fr = f.frame, *sw = NULL;
+	if(fr->format == AV_PIX_FMT_DRM_PRIME)
+	{
+		const AVDRMFrameDescriptor *d = (const AVDRMFrameDescriptor *)fr->data[0];
+		if(!drm_frames++)
+		{
+			printf("DRM PRIME frame %dx%d: %d object(s), fd %d, %zu bytes, modifier 0x%llx; layer format %.4s",
+				fr->width, fr->height, d->nb_objects, d->objects[0].fd, d->objects[0].size,
+				(unsigned long long)d->objects[0].format_modifier, (const char *)&d->layers[0].format);
+			for(int i = 0; i < d->layers[0].nb_planes; i++)
+				printf(", plane %d: object %d offset %td pitch %td", i, d->layers[0].planes[i].object_index,
+					d->layers[0].planes[i].offset, d->layers[0].planes[i].pitch);
+			printf("\n");
+		}
+		sw = av_frame_alloc();
+		if(av_hwframe_transfer_data(sw, fr, 0) < 0)
+		{
+			transfer_failed++;
+			av_frame_free(&sw);
+			av_frame_free(&f.frame);
+			return;
+		}
+		fr = sw;
+	}
 	long sum = 0, n = 0;
-	for(int y = 0; y < f.frame->height; y += 32)
-		for(int x = 0; x < f.frame->width; x += 32, n++)
-			sum += f.frame->data[0][y * f.frame->linesize[0] + x];
+	for(int y = 0; y < fr->height; y += 32)
+		for(int x = 0; x < fr->width; x += 32, n++)
+			sum += fr->data[0][y * fr->linesize[0] + x];
 	if(n && sum / n < 5)
 		green++;
+	av_frame_free(&sw);
 	av_frame_free(&f.frame);
 }
 
@@ -77,8 +107,8 @@ int main(int argc, char **argv)
 		free(copy);
 		usleep(16000);
 	}
-	printf("%s: AUs %d (+1 header unit), frames %d, empty (green) frames %d, failed sample_cb %d\n",
-		argc > 2 ? argv[2] : "v4l2m2m", aus, frames, green, failed);
+	printf("%s: AUs %d (+1 header unit), frames %d (DRM PRIME %d, transfer to software failed %d), empty (green) frames %d, failed sample_cb %d\n",
+		argc > 2 ? argv[2] : "v4l2m2m", aus, frames, drm_frames, transfer_failed, green, failed);
 	chiaki_ffmpeg_decoder_fini(&dec);
 	return 0;
 }
