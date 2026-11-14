@@ -1,0 +1,15 @@
+[Unit]
+Description=Compressed swap in RAM (zram)
+DefaultDependencies=no
+After=systemd-udevd.service
+Before=swap.target
+ConditionPathExists=/sys/block/zram0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/gts9wifi-zram
+ExecStop=/sbin/swapoff /dev/zram0
+
+[Install]
+WantedBy=swap.target

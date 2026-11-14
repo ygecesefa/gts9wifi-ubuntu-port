@@ -1,0 +1,18 @@
+#!/bin/sh
+# Compressed swap in RAM (zram), half of the memory, zstd.
+#
+# The image has no swap at all: with Firefox and Waydroid open the 11 GiB
+# fill up, and the kernel then kills applications instead of setting idle
+# ones aside.  zram keeps their pages compressed in memory (zstd, about
+# 3:1), and writes nothing to the SD card.  The kernel has zram built in
+# (CONFIG_ZRAM=y), so /dev/zram0 is always there.
+# Settings for it: /etc/sysctl.d/90-gts9wifi-zram.conf.
+set -eu
+dev=zram0
+grep -q "^/dev/$dev " /proc/swaps && exit 0
+[ "$(cat /sys/block/$dev/disksize)" = 0 ] || echo 1 > /sys/block/$dev/reset
+echo zstd > /sys/block/$dev/comp_algorithm
+kb=$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)
+echo "$((kb / 2))K" > /sys/block/$dev/disksize
+mkswap -q /dev/$dev
+swapon -p 100 /dev/$dev
