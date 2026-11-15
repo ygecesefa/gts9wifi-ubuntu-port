@@ -1,0 +1,20 @@
+# Steam (ARM64 client in the user's home) may create user namespaces.
+#
+# Ubuntu 24.04 denies unprivileged user namespaces to programs without an
+# AppArmor profile (kernel.apparmor_restrict_unprivileged_userns=1). Steam
+# needs them twice: the browser sandbox of its interface (steamwebhelper,
+# CEF) and pressure-vessel/bwrap, the container every game and Proton runs
+# in. Ubuntu's own profile "steam" (package apparmor) does the same for the
+# x86 .deb, whose paths (/usr/games/steam, /usr/lib/steam/bin_steam.sh) do
+# not exist here. The profile confines nothing (flags=(unconfined)); it only
+# gives the client and what it starts the userns permission.
+
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile gts9wifi-steam @{HOME}/.local/share/Steam/steamrtarm64/steam flags=(unconfined) {
+  userns,
+
+  include if exists <local/gts9wifi-steam>
+}

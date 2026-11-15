@@ -1,0 +1,49 @@
+#!/bin/bash
+# Start Valve's ARM64 Steam client (installed by install-steam-arm64.sh).
+#
+#   gts9wifi-steam            desktop client
+#   gts9wifi-steam --deck     full-screen controller interface (Big Picture)
+#
+# The bootstrap binary links only against libc; everything else it loads
+# (SDL, CEF, Vulkan loader ...) comes from its own directory and from the
+# Steam Linux Runtime, so those two go in front of the library path. This is
+# the start line of Switchdeck's launch-steam.sh without the Box64 and
+# Tegra settings.
+
+STEAMROOT="$HOME/.local/share/Steam"
+RT="$STEAMROOT/steamrtarm64"
+
+[ -x "$RT/steam" ] || {
+	echo "gts9wifi-steam: Steam is not installed; run install-steam-arm64.sh" >&2
+	exit 1
+}
+
+flags=()
+if [ "${1:-}" = --deck ]; then
+	shift
+	flags+=(-gamepadui)
+fi
+
+rtfiles=$(ls -d "$RT/pv-runtime/steam-runtime-steamrt-arm64"/steamrt3c_platform_*/files 2>/dev/null | head -n 1)
+export SYSTEM_PATH="$PATH"
+# steam-runtime-launcher-service and friends: the client starts them by name.
+PATH="$RT/pv-runtime/steam-runtime-steamrt-arm64/bin:$PATH"
+export SYSTEM_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
+export LD_LIBRARY_PATH="$RT${rtfiles:+:$rtfiles/lib/aarch64-linux-gnu:$rtfiles/lib}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Newer Turnip built next to the system Mesa (packaging/turnip), for Steam
+# and its games only. GTS9WIFI_STEAM_SYSTEM_MESA=1 keeps the system driver.
+icd=/usr/lib/gts9wifi-turnip/share/vulkan/icd.d/freedreno_icd.aarch64.json
+if [ -f "$icd" ] && [ -z "${GTS9WIFI_STEAM_SYSTEM_MESA:-}" ]; then
+	export VK_DRIVER_FILES="$icd"
+fi
+
+mkdir -p "$STEAMROOT/logs"
+cd "$STEAMROOT" || exit 1
+
+# Exit status 42 = "restart me" (after a client update).
+while :; do
+	"$RT/steam" "${flags[@]}" "$@"
+	rc=$?
+	[ "$rc" = 42 ] || exit "$rc"
+done

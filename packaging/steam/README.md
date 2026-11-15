@@ -1,0 +1,74 @@
+# Steam (ARM64 client) on gts9wifi
+
+**Status (2026-11-15): the client installs, updates itself (669 MB) and
+starts on the tablet** with its browser sandbox on; Steam's own hardware
+query reports "Turnip Adreno (TM) 740" as the default GPU. No game has been
+started yet. Nothing here is in the image build yet; it goes in after a
+game runs.
+
+Valve builds a native ARM64 Steam client for its own ARM hardware (Steam
+Frame, Snapdragon 8 Gen 3). It is on Valve's public update servers, runs on
+other ARM64 Linux systems with 4 KiB pages, and is **not supported by Valve**
+outside its own hardware. With it come **Proton (ARM64)** — Wine, DXVK and
+VKD3D as ARM64 code, the game's x86 code translated by the FEX built into
+Proton — and FEX for x86 Linux games. The GPU side is the tablet's own
+Vulkan driver (Mesa Turnip).
+
+| File | What |
+|---|---|
+| `install-steam-arm64.sh` | run as the user: downloads the client bootstrap and the Steam Linux Runtime 3 (ARM64) from Valve, checks both against Valve's checksums, writes the menu entry. Touches only `$HOME` |
+| `gts9wifi-steam` | the launcher (`--deck` = full-screen controller interface). Image path: `/usr/libexec/gts9wifi-steam` |
+| `apparmor/gts9wifi-steam` | **not needed with this port's kernel** (mainline 7.2 has no `kernel.apparmor_restrict_unprivileged_userns`; user namespaces just work). Kept for an Ubuntu kernel, where 24.04 denies them to programs without a profile. Path: `/etc/apparmor.d/gts9wifi-steam` |
+
+## Where it comes from
+
+- **Client:** `https://client-update.steamstatic.com/steam_client_linuxarm64`
+  is Valve's package list for the ARM64 client; every entry has a file name
+  and a `sha2`. The installer takes `bins_linuxarm64_linuxarm64` from it and
+  unpacks one file, `steamrtarm64/steam`. The client fetches the other
+  packages itself on first start.
+- **Runtime:** `https://repo.steampowered.com/steamrt3c/images/latest-public-beta.txt`
+  names the current version; `steam-runtime-steamrt-arm64.tar.xz` and
+  `SHA256SUMS` are in that version's directory.
+- **Recipe:** which package to take, where the runtime goes and how the
+  bootstrap is started are from
+  [Switchdeck](https://github.com/SildurFX/Switchdeck) (`install-steam.sh`,
+  `files/steam/launch-steam.sh`, GPL-3.0), which does this on the Nintendo
+  Switch. Not taken, because they exist for the Switch's Tegra X1 (ARMv8.0,
+  Vulkan 1.2, 4 GB): Box64, the downgrade to an April 2026 client, DXVK-Sarek
+  and VKD3D-Proton 2.3.1 in place of Proton's own, the "Armv8.0" Proton
+  build, the pinned bootstrap hash (the installer reads the current one from
+  Valve's list instead), the disabled CEF sandbox flags, and its zram setup
+  (this image has its own, `gts9wifi-zram`).
+
+Checked on 2026-11-15 (build host, download only): list version 1794536281,
+`bins_linuxarm64_linuxarm64.zip.5448e08e…` sha256 `8407347d…` matches;
+runtime `3c.0.20261103.268067`, tar.xz sha256 `bc4c1319…` matches. The
+bootstrap needs only libc (`readelf -d`), RUNPATH `$ORIGIN`.
+
+## Install on a running tablet
+
+```sh
+sudo apt install steam-devices        # udev rules for controllers
+./install-steam-arm64.sh
+```
+
+Remove: `rm -rf ~/.local/share/Steam ~/.steam ~/.local/share/applications/steam.desktop`
+(and the AppArmor file, if installed).
+
+## Found on the device
+
+- The client starts `steam-runtime-launcher-service` by name: the runtime's
+  `bin` directory must be on `PATH` (launcher).
+- It runs `../steamrtarm32/gldriverquery` and `vulkandriverquery`, a
+  directory Valve does not ship: `steamrtarm32` is a link to `steamrtarm64`
+  (installer; Switchdeck does the same).
+
+## To be answered on the device
+
+- Does a game start (pressure-vessel container, Proton ARM64)?
+- `steamwebhelper.sh` pins the interface to cores 2–6 (`taskset 0x7c`, the
+  Steam Frame's layout); on SM8550 that is one small core and the four
+  middle cores, which is acceptable.
+- Which Proton (ARM64) the client offers, and frame rates with Mesa 25.2.8
+  against a newer Turnip.

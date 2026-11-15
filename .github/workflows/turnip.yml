@@ -1,0 +1,23 @@
+# Builds a newer Turnip (Mesa Vulkan driver for Adreno) for side-by-side use
+# with packaging/turnip/build-turnip.sh.  Run by hand: Actions -> turnip ->
+# Run workflow.  The tarball comes out as a workflow artifact.
+name: turnip
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Turnip
+        run: bash packaging/turnip/build-turnip.sh "$HOME/turnip-build"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: turnip-gts9wifi-${{ github.sha }}
+          path: ~/turnip-build/out/
+          retention-days: 3
