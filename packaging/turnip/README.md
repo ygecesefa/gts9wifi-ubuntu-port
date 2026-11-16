@@ -16,7 +16,14 @@ affected. A program gets the new driver only through
 which the Steam launcher ([packaging/steam](../steam/)) sets when the file
 exists; `GTS9WIFI_STEAM_SYSTEM_MESA=1` goes back to the system driver.
 
-Install on the tablet: `sudo tar -C / -xf gts9wifi-turnip-26.3.0.tar.zst`.
+Install on the tablet:
+
+    sudo apt install libxcb-keysyms1      # the one library the driver needs that the image lacks
+    sudo tar -C / -xf gts9wifi-turnip-26.3.0.tar.zst
+
 Remove: `sudo rm -r /usr/lib/gts9wifi-turnip`.
 
-**Status: not yet built or tried on the tablet.**
+**Status (2026-11-15):** built by the workflow (run 43742143040) and
+installed on the tablet. `vulkaninfo` with the variable above reports
+`Mesa 26.3.0`, `sparseBinding = true`, `sparseResidencyBuffer = true`
+(`sparseResidencyImage2D` stays false). **Subliminal renders correctly in game with it** (user, 2026-11-16); no GPU fault in the kernel log during that session. vkd3d now reports shader model 6.6 (6.0 before) but still feature level 11_1, so the game stays on its SM5 path.

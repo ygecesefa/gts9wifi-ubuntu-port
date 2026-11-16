@@ -18,6 +18,8 @@ Vulkan driver (Mesa Turnip).
 |---|---|
 | `install-steam-arm64.sh` | run as the user: downloads the client bootstrap and the Steam Linux Runtime 3 (ARM64) from Valve, checks both against Valve's checksums, writes the menu entry. Touches only `$HOME` |
 | `gts9wifi-steam` | the launcher (`--deck` = full-screen controller interface). Image path: `/usr/libexec/gts9wifi-steam` |
+| `gts9wifi-game-manager` | "Galaxy Game Manager", a small GTK4/libadwaita app for the launcher's settings (`~/.config/gts9wifi/steam.conf`): frame rate limit for every Proton game (`DXVK_FRAME_RATE`, `VKD3D_FRAME_RATE`), MangoHud overlay, newer or system Vulkan driver, open/restart Steam. Image path: `/usr/libexec/gts9wifi-game-manager` |
+| `gts9wifi-game-session` | started by the launcher, ends with it. While a game runs (Steam's `reaper SteamLaunch AppId=N` process exists): keeps the screen on (idle inhibitor), locks rotation and puts it back afterwards, and **heat protection**: when the hottest CPU/GPU sensor (default 100 °C) or the battery (default 45 °C) stays at its limit for 20 s, the game's processes are closed and a notification says why. Steam itself is not closed. Tested on the tablet with a stand-in game and a 30 °C limit. Image path: `/usr/libexec/gts9wifi-game-session` |
 | `apparmor/gts9wifi-steam` | **not needed with this port's kernel** (mainline 7.2 has no `kernel.apparmor_restrict_unprivileged_userns`; user namespaces just work). Kept for an Ubuntu kernel, where 24.04 denies them to programs without a profile. Path: `/etc/apparmor.d/gts9wifi-steam` |
 
 ## Where it comes from
@@ -72,3 +74,27 @@ Remove: `rm -rf ~/.local/share/Steam ~/.steam ~/.local/share/applications/steam.
   middle cores, which is acceptable.
 - Which Proton (ARM64) the client offers, and frame rates with Mesa 25.2.8
   against a newer Turnip.
+
+## Emulators and controllers
+
+Not Steam, but looked after by the same two programs: the Game Manager lists
+the installed ones, and `gts9wifi-game-session` treats them as games (screen
+on, rotation lock, heat protection). All are Flathub's own aarch64 builds:
+
+    sudo flatpak install flathub org.ppsspp.PPSSPP org.duckstation.DuckStation \
+        org.DolphinEmu.dolphin-emu org.libretro.RetroArch net.rpcs3.RPCS3 \
+        io.github.ryubing.Ryujinx dev.eden_emu.eden io.github.antimicrox.antimicrox
+    sudo apt install joystick jstest-gtk steam-devices
+
+| | Flathub aarch64 (checked 2026-11-16) |
+|---|---|
+| yes | PPSSPP, DuckStation, Dolphin, melonDS, Flycast, RetroArch, MAME, RPCS3, Ryujinx (Ryubing), Eden, xemu, Play!, AntiMicroX |
+| no | PCSX2, Azahar, Cemu, ES-DE, shadPS4 |
+
+Games and console system files are the user's own dumps; none are shipped.
+
+Controllers: the kernel has `xpad`, `hid-playstation` (DualSense/DualShock 4),
+`hid-sony`, `hid-nintendo` (Switch Pro, Joy-Con), `hid-microsoft` and
+`hid-steam` as modules; `steam-devices` gives the logged-in user access to
+their raw HID nodes (Steam Input, rumble, gyro). AntiMicroX maps a controller
+to keys for games without controller support; `jstest-gtk` tests one.

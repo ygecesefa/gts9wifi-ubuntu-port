@@ -1,0 +1,12 @@
+[Unit]
+Description=Screen, rotation and heat protection while a game runs
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/gts9wifi-game-session
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

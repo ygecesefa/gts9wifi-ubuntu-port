@@ -123,6 +123,42 @@ Categories=Game;
 MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;
 StartupWMClass=steam
 EOF
+cat > "$HOME/.local/share/applications/steam-bigpicture.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Steam (Big Picture)
+Comment=Steam's full-screen controller interface
+Exec=$launcher --deck
+Icon=steam
+Terminal=false
+Categories=Game;
+EOF
+
+# Screen on, rotation lock and heat protection while a game runs. In the
+# image this is /usr/lib/systemd/user/gts9wifi-game-session.service.
+if [ ! -x /usr/libexec/gts9wifi-game-session ]; then
+	install -D -m 755 "$HERE/gts9wifi-game-session" "$STEAMROOT/gts9wifi-game-session"
+	mkdir -p "$HOME/.config/systemd/user"
+	sed "s|/usr/libexec/gts9wifi-game-session|$STEAMROOT/gts9wifi-game-session|" \
+		"$HERE/gts9wifi-game-session.service" > "$HOME/.config/systemd/user/gts9wifi-game-session.service"
+	systemctl --user daemon-reload
+	systemctl --user enable --now gts9wifi-game-session.service
+fi
+manager=/usr/libexec/gts9wifi-game-manager
+if [ ! -x "$manager" ]; then
+	install -D -m 755 "$HERE/gts9wifi-game-manager" "$STEAMROOT/gts9wifi-game-manager"
+	manager="$STEAMROOT/gts9wifi-game-manager"
+fi
+cat > "$HOME/.local/share/applications/gts9wifi-game-manager.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Galaxy Game Manager
+Comment=Frame rate limit, performance overlay and graphics driver for Steam games
+Exec=$manager
+Icon=applications-games
+Terminal=false
+Categories=Game;Settings;
+EOF
 
 echo
 echo "Done. Start Steam from the app grid; the first start downloads the client."

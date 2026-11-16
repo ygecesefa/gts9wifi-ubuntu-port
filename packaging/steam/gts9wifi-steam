@@ -9,6 +9,18 @@
 # Steam Linux Runtime, so those two go in front of the library path. This is
 # the start line of Switchdeck's launch-steam.sh without the Box64 and
 # Tegra settings.
+#
+# Settings: ~/.config/gts9wifi/steam.conf, lines of NAME=value, written by
+# the Game Manager app (gts9wifi-game-manager). They are read when Steam
+# starts, so a change needs Steam to be restarted.
+#   FPS_LIMIT=45     cap every Proton game (DXVK and vkd3d-proton honour it):
+#                    less heat, steadier frame times. 0 or absent = no cap
+#   HUD=1            MangoHud overlay (frame rate, CPU/GPU load, temperatures);
+#                    needs the package mangohud
+#   SYSTEM_MESA=1    use the system's Vulkan driver instead of the newer
+#                    Turnip of packaging/turnip
+# KEEP_AWAKE, LOCK_ROTATION and HEAT_* belong to gts9wifi-game-session (a
+# user service of its own).
 
 STEAMROOT="$HOME/.local/share/Steam"
 RT="$STEAMROOT/steamrtarm64"
@@ -24,19 +36,41 @@ if [ "${1:-}" = --deck ]; then
 	flags+=(-gamepadui)
 fi
 
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/gts9wifi/steam.conf"
+FPS_LIMIT='' HUD='' SYSTEM_MESA="${GTS9WIFI_STEAM_SYSTEM_MESA:-}"
+if [ -r "$conf" ]; then
+	while IFS='=' read -r name value; do
+		case "$name" in
+			FPS_LIMIT) case "$value" in ''|*[!0-9]*) ;; *) FPS_LIMIT=$value ;; esac ;;
+			HUD) [ "$value" != 1 ] || HUD=1 ;;
+			SYSTEM_MESA) [ "$value" != 1 ] || SYSTEM_MESA=1 ;;
+		esac
+	done < "$conf"
+fi
+
+if [ -n "$FPS_LIMIT" ] && [ "$FPS_LIMIT" != 0 ]; then
+	export DXVK_FRAME_RATE="$FPS_LIMIT" VKD3D_FRAME_RATE="$FPS_LIMIT"
+fi
+[ -z "$HUD" ] || export MANGOHUD=1
+
+# Newer Turnip built next to the system Mesa (packaging/turnip), for Steam
+# and its games only.
+icd=/usr/lib/gts9wifi-turnip/share/vulkan/icd.d/freedreno_icd.aarch64.json
+if [ -f "$icd" ] && [ -z "$SYSTEM_MESA" ]; then
+	export VK_DRIVER_FILES="$icd"
+fi
+
+# Wine asks PipeWire for a 5 ms buffer; with a game loading the CPU its audio
+# thread misses that often (measured: thousands of underruns on the game's
+# streams in pw-top, heard as crackling). 60 ms is the usual value for Wine.
+export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-60}"
+
 rtfiles=$(ls -d "$RT/pv-runtime/steam-runtime-steamrt-arm64"/steamrt3c_platform_*/files 2>/dev/null | head -n 1)
 export SYSTEM_PATH="$PATH"
 # steam-runtime-launcher-service and friends: the client starts them by name.
 PATH="$RT/pv-runtime/steam-runtime-steamrt-arm64/bin:$PATH"
 export SYSTEM_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
 export LD_LIBRARY_PATH="$RT${rtfiles:+:$rtfiles/lib/aarch64-linux-gnu:$rtfiles/lib}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-# Newer Turnip built next to the system Mesa (packaging/turnip), for Steam
-# and its games only. GTS9WIFI_STEAM_SYSTEM_MESA=1 keeps the system driver.
-icd=/usr/lib/gts9wifi-turnip/share/vulkan/icd.d/freedreno_icd.aarch64.json
-if [ -f "$icd" ] && [ -z "${GTS9WIFI_STEAM_SYSTEM_MESA:-}" ]; then
-	export VK_DRIVER_FILES="$icd"
-fi
 
 mkdir -p "$STEAMROOT/logs"
 cd "$STEAMROOT" || exit 1

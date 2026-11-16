@@ -1,0 +1,351 @@
+#!/usr/bin/python3
+# Game Manager: the settings of the Steam launcher (gts9wifi-steam) as an app.
+#
+# It edits ~/.config/gts9wifi/steam.conf (NAME=value lines) and nothing else;
+# the launcher reads that file when Steam starts, so "Restart Steam" is
+# offered after a change. See gts9wifi-steam for what each setting does.
+
+import os
+import shutil
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+
+CONF = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "gts9wifi", "steam.conf")
+STEAMROOT = os.path.expanduser("~/.local/share/Steam")
+TURNIP_ICD = "/usr/lib/gts9wifi-turnip/share/vulkan/icd.d/freedreno_icd.aarch64.json"
+FPS_CHOICES = [0, 30, 40, 45, 60, 90, 120]
+# Flatpak id, name, what it plays. Shown when installed.
+EMULATORS = [
+    ("org.libretro.RetroArch", "RetroArch", "Many classic consoles and arcade"),
+    ("org.duckstation.DuckStation", "DuckStation", "PlayStation"),
+    ("org.ppsspp.PPSSPP", "PPSSPP", "PSP"),
+    ("org.purei.Play", "Play!", "PlayStation 2"),
+    ("net.rpcs3.RPCS3", "RPCS3", "PlayStation 3"),
+    ("org.DolphinEmu.dolphin-emu", "Dolphin", "GameCube and Wii"),
+    ("net.kuribo64.melonDS", "melonDS", "Nintendo DS"),
+    ("io.github.ryubing.Ryujinx", "Ryujinx", "Nintendo Switch"),
+    ("dev.eden_emu.eden", "Eden", "Nintendo Switch"),
+    ("org.flycast.Flycast", "Flycast", "Dreamcast"),
+    ("app.xemu.xemu", "xemu", "Xbox"),
+    ("org.mamedev.MAME", "MAME", "Arcade"),
+]
+TOOLS = [
+    (["jstest-gtk"], "Test a controller", "Buttons, sticks and calibration"),
+    (["flatpak", "run", "io.github.antimicrox.antimicrox"], "Map a controller to keys",
+     "For games without controller support (AntiMicroX)"),
+]
+
+
+def flatpak_installed(appid):
+    return any(os.path.isdir(os.path.join(base, "app", appid)) for base in (
+        "/var/lib/flatpak", os.path.expanduser("~/.local/share/flatpak")))
+
+
+def launcher():
+    for p in ("/usr/libexec/gts9wifi-steam", os.path.join(STEAMROOT, "gts9wifi-steam")):
+        if os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def read_conf():
+    conf = {}
+    try:
+        with open(CONF) as f:
+            for line in f:
+                name, sep, value = line.strip().partition("=")
+                if sep:
+                    conf[name] = value
+    except OSError:
+        pass
+    return conf
+
+
+def write_conf(conf):
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    tmp = CONF + ".tmp"
+    with open(tmp, "w") as f:
+        for name in sorted(conf):
+            f.write(f"{name}={conf[name]}\n")
+    os.replace(tmp, CONF)
+
+
+def steam_running():
+    return subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", "steam"],
+                          stdout=subprocess.DEVNULL).returncode == 0
+
+
+def hottest():
+    best = None
+    base = "/sys/class/thermal"
+    try:
+        for zone in os.listdir(base):
+            if zone.startswith("thermal_zone"):
+                try:
+                    with open(f"{base}/{zone}/temp") as f:
+                        t = int(f.read()) / 1000
+                except (OSError, ValueError):
+                    continue
+                if best is None or t > best:
+                    best = t
+    except OSError:
+        pass
+    return best
+
+
+class Window(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Galaxy Game Manager",
+                         default_width=600, default_height=900)
+        self.conf = read_conf()
+
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        self.toasts = Adw.ToastOverlay()
+        view.set_content(self.toasts)
+        self.set_content(view)
+
+        page = Adw.PreferencesPage()
+        self.toasts.set_child(page)
+
+        # --- performance ----------------------------------------------------
+        perf = Adw.PreferencesGroup(
+            title="Performance",
+            description="Applies to every Windows game Steam starts (Proton).")
+        page.add(perf)
+
+        self.fps = Adw.ComboRow(
+            title="Frame rate limit",
+            subtitle="Lower means less heat and longer battery life")
+        self.fps.set_model(Gtk.StringList.new(
+            ["Unlimited" if v == 0 else f"{v} fps" for v in FPS_CHOICES]))
+        try:
+            current = int(self.conf.get("FPS_LIMIT", "0") or 0)
+        except ValueError:
+            current = 0
+        self.fps.set_selected(FPS_CHOICES.index(current) if current in FPS_CHOICES else 0)
+        self.fps.connect("notify::selected", self.on_fps)
+        perf.add(self.fps)
+
+        have_hud = shutil.which("mangohud") is not None
+        self.hud = Adw.SwitchRow(
+            title="Performance overlay",
+            subtitle="Frame rate, CPU and GPU load in a corner of the game (MangoHud)"
+            if have_hud else "Needs the package mangohud")
+        self.hud.set_sensitive(have_hud)
+        self.hud.set_active(have_hud and self.conf.get("HUD") == "1")
+        self.hud.connect("notify::active", self.on_switch, "HUD", False)
+        perf.add(self.hud)
+
+        res = Adw.ActionRow(
+            title="Game resolution",
+            subtitle="Set in each game for now. One setting for all games needs "
+                     "gamescope, which is not in this image yet")
+        res.set_sensitive(False)
+        perf.add(res)
+
+        # --- while a game runs ---------------------------------------------
+        play = Adw.PreferencesGroup(title="While a game runs")
+        page.add(play)
+        for key, title, subtitle in (
+                ("KEEP_AWAKE", "Keep the screen on",
+                 "No dimming or sleep in the middle of a game"),
+                ("LOCK_ROTATION", "Lock screen rotation",
+                 "Put back to your own setting when the game ends")):
+            row = Adw.SwitchRow(title=title, subtitle=subtitle)
+            row.set_active(self.conf.get(key, "1") != "0")
+            row.connect("notify::active", self.on_default_on, key)
+            play.add(row)
+
+        # --- heat protection -----------------------------------------------
+        heat = Adw.PreferencesGroup(
+            title="Heat protection",
+            description="Closes the running game, with a notification, when a "
+                        "limit is exceeded for 20 seconds.")
+        page.add(heat)
+        guard = Adw.SwitchRow(title="Close the game when the tablet overheats")
+        guard.set_active(self.conf.get("HEAT_GUARD", "1") != "0")
+        guard.connect("notify::active", self.on_default_on, "HEAT_GUARD")
+        heat.add(guard)
+        for key, title, subtitle, choices, default in (
+                ("HEAT_CPU_MAX", "Processor limit",
+                 "Games normally run at 85–96 °C; the tablet powers off at 110 °C",
+                 [95, 98, 100, 105], 100),
+                ("HEAT_BATTERY_MAX", "Battery limit",
+                 "How hot the tablet feels in the hand", [40, 42, 45, 48], 45)):
+            row = Adw.ComboRow(title=title, subtitle=subtitle)
+            row.set_model(Gtk.StringList.new([f"{v} °C" for v in choices]))
+            try:
+                current = int(self.conf.get(key, default))
+            except ValueError:
+                current = default
+            row.set_selected(choices.index(current) if current in choices
+                             else choices.index(default))
+            row.connect("notify::selected", self.on_choice, key, choices)
+            heat.add(row)
+
+        # --- emulators and controllers --------------------------------------
+        emus = [e for e in EMULATORS if flatpak_installed(e[0])]
+        if emus:
+            group = Adw.PreferencesGroup(
+                title="Emulators",
+                description="Screen, rotation and heat protection apply to these too.")
+            page.add(group)
+            for appid, name, plays in emus:
+                row = Adw.ActionRow(title=name, subtitle=plays, activatable=True)
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.connect("activated", self.on_run, ["flatpak", "run", appid])
+                group.add(row)
+        tools = [t for t in TOOLS if (shutil.which(t[0][0]) and (
+            t[0][0] != "flatpak" or flatpak_installed(t[0][2])))]
+        if tools:
+            group = Adw.PreferencesGroup(title="Controllers")
+            page.add(group)
+            for argv, title, subtitle in tools:
+                row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.connect("activated", self.on_run, argv)
+                group.add(row)
+
+        # --- graphics driver -----------------------------------------------
+        gfx = Adw.PreferencesGroup(title="Graphics driver")
+        page.add(gfx)
+        have_turnip = os.path.exists(TURNIP_ICD)
+        self.turnip = Adw.SwitchRow(
+            title="Newer Vulkan driver for games",
+            subtitle="Turnip from a newer Mesa, used by Steam only. Turn off if a "
+                     "game misbehaves" if have_turnip else "Not installed")
+        self.turnip.set_sensitive(have_turnip)
+        self.turnip.set_active(have_turnip and self.conf.get("SYSTEM_MESA") != "1")
+        self.turnip.connect("notify::active", self.on_switch, "SYSTEM_MESA", True)
+        gfx.add(self.turnip)
+
+        # --- steam ----------------------------------------------------------
+        steam = Adw.PreferencesGroup(
+            title="Steam",
+            description="Settings take effect the next time Steam starts.")
+        page.add(steam)
+
+        self.status = Adw.ActionRow(title="Status")
+        steam.add(self.status)
+
+        for title, args in (("Open Steam", []), ("Open Steam in Big Picture", ["--deck"])):
+            row = Adw.ActionRow(title=title, activatable=True)
+            row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.connect("activated", self.on_open, args)
+            steam.add(row)
+
+        self.restart = Adw.ActionRow(
+            title="Restart Steam", subtitle="Closes Steam and any running game",
+            activatable=True)
+        self.restart.add_suffix(Gtk.Image.new_from_icon_name("view-refresh-symbolic"))
+        self.restart.connect("activated", self.on_restart)
+        steam.add(self.restart)
+
+        self.refresh()
+        GLib.timeout_add_seconds(3, self.refresh)
+
+    # --- settings -----------------------------------------------------------
+    def save(self):
+        write_conf(self.conf)
+        if steam_running():
+            self.toasts.add_toast(Adw.Toast(title="Restart Steam to apply", timeout=3))
+
+    def on_fps(self, row, _pspec):
+        value = FPS_CHOICES[row.get_selected()]
+        if value:
+            self.conf["FPS_LIMIT"] = str(value)
+        else:
+            self.conf.pop("FPS_LIMIT", None)
+        self.save()
+
+    def on_switch(self, row, _pspec, key, inverted):
+        if row.get_active() != inverted:
+            self.conf[key] = "1"
+        else:
+            self.conf.pop(key, None)
+        self.save()
+
+    def on_run(self, _row, argv):
+        subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def on_default_on(self, row, _pspec, key):
+        # Read by gts9wifi-game-session as soon as the file changes.
+        self.conf[key] = "1" if row.get_active() else "0"
+        write_conf(self.conf)
+
+    def on_choice(self, row, _pspec, key, choices):
+        self.conf[key] = str(choices[row.get_selected()])
+        write_conf(self.conf)
+
+    # --- steam ---------------------------------------------------------------
+    def refresh(self):
+        running = steam_running()
+        t = hottest()
+        text = "Steam is running" if running else "Steam is not running"
+        if t is not None:
+            text += f"  ·  hottest sensor {t:.0f} °C"
+        self.status.set_subtitle(text)
+        self.restart.set_sensitive(running and launcher() is not None)
+        return True
+
+    def start(self, args):
+        exe = launcher()
+        if exe is None:
+            self.toasts.add_toast(Adw.Toast(title="Steam is not installed"))
+            return
+        subprocess.Popen([exe, *args], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+
+    def on_open(self, _row, args):
+        if steam_running():
+            self.toasts.add_toast(Adw.Toast(title="Steam is already running"))
+        else:
+            self.start(args)
+
+    def on_restart(self, _row):
+        deck = subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", "steamrtarm64/steam -gamepadui"],
+                              stdout=subprocess.DEVNULL).returncode == 0
+        env = dict(os.environ, LD_LIBRARY_PATH=os.path.join(STEAMROOT, "steamrtarm64"))
+        subprocess.Popen([os.path.join(STEAMROOT, "steamrtarm64", "steam"), "-shutdown"],
+                         env=env, cwd=STEAMROOT, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.restart.set_sensitive(False)
+        self.toasts.add_toast(Adw.Toast(title="Restarting Steam…", timeout=5))
+        self.waited = 0
+        GLib.timeout_add_seconds(1, self.wait_and_start, ["--deck"] if deck else [])
+
+    def wait_and_start(self, args):
+        self.waited += 1
+        if steam_running() and self.waited < 40:
+            return True
+        if steam_running():
+            subprocess.run(["pkill", "-u", str(os.getuid()), "-x", "steam"])
+            GLib.timeout_add_seconds(3, lambda: self.start(args) or False)
+        else:
+            self.start(args)
+        return False
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="io.github.gts9wifi.GameManager",
+                         flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+
+    def do_activate(self):
+        win = self.props.active_window or Window(self)
+        win.present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run(sys.argv))

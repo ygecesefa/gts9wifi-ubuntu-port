@@ -1,0 +1,280 @@
+#!/usr/bin/python3
+# A user service (gts9wifi-game-session.service, part of the graphical
+# session) that looks after the tablet while a game is running:
+#
+#   keep the screen on      an idle inhibitor (gnome-session-inhibit) for as
+#                           long as a game runs
+#   lock the rotation       GNOME's orientation lock on while a game runs,
+#                           put back to what it was afterwards
+#   heat protection         if the hottest CPU/GPU sensor or the battery
+#                           stays at its limit for 20 s, the game is closed
+#                           and a notification says why
+#
+# "A game runs" = Steam's "reaper SteamLaunch AppId=N -- ..." process exists
+# (every process of the game is a descendant of it; Steam itself is never
+# closed), or one of the emulators in EMULATORS is open (Flatpak puts each
+# app into a systemd scope app-flatpak-<id>-<pid>.scope; closed with
+# "flatpak kill").
+#
+# Settings (~/.config/gts9wifi/steam.conf, re-read when the file changes):
+#   KEEP_AWAKE=0|1 (1)   LOCK_ROTATION=0|1 (1)   HEAT_GUARD=0|1 (1)
+#   HEAT_CPU_MAX=100     °C, hottest cpu*/gpu* thermal zone. The kernel slows
+#                        the CPU from 90-95 °C on and powers off at 110 °C,
+#                        so a game normally sits below this
+#   HEAT_BATTERY_MAX=45  °C, battery (the best measure of how hot the tablet
+#                        feels and the part that ages with heat)
+#
+#   gts9wifi-game-session [PID]   with PID: end when that process ends
+
+import glob
+import os
+import signal
+import subprocess
+import sys
+import time
+
+CONF = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "gts9wifi", "steam.conf")
+STEAMAPPS = os.path.expanduser("~/.local/share/Steam/steamapps")
+DEFAULTS = {"KEEP_AWAKE": 1, "LOCK_ROTATION": 1, "HEAT_GUARD": 1,
+            "HEAT_CPU_MAX": 100, "HEAT_BATTERY_MAX": 45}
+HOLD = 20          # seconds a limit must be exceeded
+INTERVAL = 2       # while a game runs
+IDLE_INTERVAL = 5
+# Flatpak application ids counted as games (see README.md, "Emulators").
+EMULATORS = {
+    "org.ppsspp.PPSSPP": "PPSSPP",
+    "org.duckstation.DuckStation": "DuckStation",
+    "org.DolphinEmu.dolphin-emu": "Dolphin",
+    "org.libretro.RetroArch": "RetroArch",
+    "net.rpcs3.RPCS3": "RPCS3",
+    "io.github.ryubing.Ryujinx": "Ryujinx",
+    "dev.eden_emu.eden": "Eden",
+    "net.kuribo64.melonDS": "melonDS",
+    "org.flycast.Flycast": "Flycast",
+    "org.purei.Play": "Play!",
+    "app.xemu.xemu": "xemu",
+    "org.mamedev.MAME": "MAME",
+}
+APP_SLICE = f"/sys/fs/cgroup/user.slice/user-{os.getuid()}.slice/user@{os.getuid()}.service/app.slice"
+ROTATION = ("org.gnome.settings-daemon.peripherals.touchscreen", "orientation-lock")
+
+
+def read_conf():
+    conf = dict(DEFAULTS)
+    try:
+        with open(CONF) as f:
+            for line in f:
+                name, sep, value = line.strip().partition("=")
+                if sep and name in conf:
+                    try:
+                        conf[name] = int(value)
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return conf
+
+
+def cmdline(pid):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def emulators():
+    """Ids of the EMULATORS that are open."""
+    found = set()
+    try:
+        for name in os.listdir(APP_SLICE):
+            if name.startswith("app-flatpak-") and name.endswith(".scope"):
+                appid = name[len("app-flatpak-"):-len(".scope")].rpartition("-")[0]
+                if appid in EMULATORS:
+                    found.add(appid)
+    except OSError:
+        pass
+    return found
+
+
+def steam_games():
+    """{reaper pid: app id} of the running Steam games of this user."""
+    found = {}
+    uid = os.getuid()
+    for path in glob.glob("/proc/[0-9]*"):
+        try:
+            if os.stat(path).st_uid != uid:
+                continue
+        except OSError:
+            continue
+        args = cmdline(path[6:])
+        if len(args) > 2 and os.path.basename(args[0]) == "reaper" and args[1] == "SteamLaunch":
+            appid = next((a[6:] for a in args if a.startswith("AppId=")), "")
+            found[int(path[6:])] = appid
+    return found
+
+
+def descendants(root):
+    parent = {}
+    for path in glob.glob("/proc/[0-9]*/stat"):
+        try:
+            with open(path) as f:
+                data = f.read()
+            parent[int(path.split("/")[2])] = int(data.rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            pass
+    out, todo = [], [root]
+    while todo:
+        p = todo.pop()
+        kids = [c for c, pp in parent.items() if pp == p]
+        out += kids
+        todo += kids
+    return out
+
+
+def app_name(appid):
+    try:
+        with open(os.path.join(STEAMAPPS, f"appmanifest_{appid}.acf")) as f:
+            for line in f:
+                parts = line.split('"')
+                if len(parts) >= 4 and parts[1] == "name":
+                    return parts[3]
+    except OSError:
+        pass
+    return "the game"
+
+
+def close_game(reaper):
+    pids = descendants(reaper)
+    for sig, wait in ((signal.SIGTERM, 6), (signal.SIGKILL, 0)):
+        for p in pids:
+            try:
+                os.kill(p, sig)
+            except OSError:
+                pass
+        end = time.time() + wait
+        while time.time() < end and any(os.path.exists(f"/proc/{p}") for p in pids):
+            time.sleep(0.5)
+        pids = [p for p in pids if os.path.exists(f"/proc/{p}")]
+        if not pids:
+            break
+
+
+def temperatures():
+    cpu = battery = None
+    for zone in glob.glob("/sys/class/thermal/thermal_zone*"):
+        try:
+            with open(zone + "/type") as f:
+                kind = f.read().strip()
+            with open(zone + "/temp") as f:
+                t = int(f.read()) / 1000
+        except (OSError, ValueError):
+            continue
+        if kind.startswith(("cpu", "gpu")):
+            cpu = t if cpu is None else max(cpu, t)
+        elif "battery" in kind:
+            battery = t if battery is None else max(battery, t)
+    return cpu, battery
+
+
+def gsettings(*args):
+    try:
+        return subprocess.run(["gsettings", *args], capture_output=True, text=True,
+                              timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def notify(title, body):
+    try:
+        subprocess.run(["notify-send", "-u", "critical", "-i", "dialog-warning",
+                        "-a", "Galaxy Game Manager", title, body], timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+class Session:
+    def __init__(self):
+        self.inhibitor = None
+        self.rotation_before = None
+
+    def enter(self, conf):
+        if conf["KEEP_AWAKE"] and self.inhibitor is None:
+            try:
+                self.inhibitor = subprocess.Popen(
+                    ["gnome-session-inhibit", "--inhibit", "idle", "--reason",
+                     "A game is running", "sleep", "infinity"])
+            except OSError:
+                pass
+        if conf["LOCK_ROTATION"] and self.rotation_before is None:
+            before = gsettings("get", *ROTATION)
+            if before in ("true", "false"):
+                self.rotation_before = before
+                if before == "false":
+                    gsettings("set", *ROTATION, "true")
+
+    def leave(self):
+        if self.inhibitor is not None:
+            self.inhibitor.terminate()
+            self.inhibitor = None
+        if self.rotation_before is not None:
+            if self.rotation_before == "false":
+                gsettings("set", *ROTATION, "false")
+            self.rotation_before = None
+
+
+def main():
+    follow = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    session = Session()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    conf, conf_mtime = read_conf(), None
+    hot_since = None
+    try:
+        while follow is None or os.path.exists(f"/proc/{follow}"):
+            try:
+                mtime = os.stat(CONF).st_mtime
+            except OSError:
+                mtime = None
+            if mtime != conf_mtime:
+                conf, conf_mtime = read_conf(), mtime
+                if session.inhibitor or session.rotation_before:
+                    session.leave()         # applied again below with the new settings
+
+            steam, emus = steam_games(), emulators()
+            running = bool(steam or emus)
+            if running:
+                session.enter(conf)
+            else:
+                session.leave()
+                hot_since = None
+
+            if running and conf["HEAT_GUARD"]:
+                cpu, battery = temperatures()
+                why = None
+                if cpu is not None and cpu >= conf["HEAT_CPU_MAX"]:
+                    why = f"The processor reached {cpu:.0f} °C"
+                elif battery is not None and battery >= conf["HEAT_BATTERY_MAX"]:
+                    why = f"The battery reached {battery:.0f} °C"
+                if why is None:
+                    hot_since = None
+                elif hot_since is None:
+                    hot_since = time.time()
+                elif time.time() - hot_since >= HOLD:
+                    names = ", ".join(sorted({app_name(a) for a in steam.values()}
+                                             | {EMULATORS[e] for e in emus}))
+                    for reaper in steam:
+                        close_game(reaper)
+                    for appid in emus:
+                        subprocess.run(["flatpak", "kill", appid], timeout=20)
+                    notify("Game closed: the tablet got too hot",
+                           f"{why}. Closed {names} to let it cool down.")
+                    hot_since = None
+            time.sleep(INTERVAL if running else IDLE_INTERVAL)
+    finally:
+        session.leave()
+
+
+if __name__ == "__main__":
+    main()
