@@ -47,6 +47,37 @@ TOOLS = [
 ]
 
 
+AUTOSTART_NAME = "gts9wifi-steam-bigpicture.desktop"
+AUTOSTART_SYSTEM = os.path.join("/etc/xdg/autostart", AUTOSTART_NAME)
+AUTOSTART_USER = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "autostart", AUTOSTART_NAME)
+
+
+def autostart_enabled():
+    """The user's file overrides the image's (/etc/xdg/autostart)."""
+    for path in (AUTOSTART_USER, AUTOSTART_SYSTEM):
+        try:
+            with open(path) as f:
+                text = f.read()
+        except OSError:
+            continue
+        return "\nHidden=true" not in text and "X-GNOME-Autostart-enabled=false" not in text
+    return False
+
+
+def set_autostart(on):
+    exe = launcher()
+    os.makedirs(os.path.dirname(AUTOSTART_USER), exist_ok=True)
+    with open(AUTOSTART_USER + ".tmp", "w") as f:
+        f.write("[Desktop Entry]\nType=Application\nName=Steam Big Picture\n"
+                "Comment=Start Steam's full-screen interface at login\n"
+                f"Exec={exe or 'gts9wifi-steam'} --deck\nIcon=steam\nTerminal=false\n"
+                "X-GNOME-Autostart-Delay=3\n"
+                f"Hidden={'false' if on else 'true'}\n")
+    os.replace(AUTOSTART_USER + ".tmp", AUTOSTART_USER)
+
+
 def flatpak_installed(appid):
     return any(os.path.isdir(os.path.join(base, "app", appid)) for base in (
         "/var/lib/flatpak", os.path.expanduser("~/.local/share/flatpak")))
@@ -118,6 +149,18 @@ class Window(Adw.ApplicationWindow):
 
         page = Adw.PreferencesPage()
         self.toasts.set_child(page)
+
+        # --- start ----------------------------------------------------------
+        start = Adw.PreferencesGroup(title="Start")
+        page.add(start)
+        boot = Adw.SwitchRow(
+            title="Open Big Picture at login",
+            subtitle="The tablet starts straight into Steam's full-screen "
+                     "interface, like a game console. Off: the normal desktop")
+        boot.set_active(autostart_enabled())
+        boot.set_sensitive(launcher() is not None)
+        boot.connect("notify::active", lambda row, _p: set_autostart(row.get_active()))
+        start.add(boot)
 
         # --- performance ----------------------------------------------------
         perf = Adw.PreferencesGroup(

@@ -1,0 +1,11 @@
+[Desktop Entry]
+# Image: /etc/xdg/autostart. Starts Steam's Big Picture at login (GalaxyDeck
+# default). The Game Manager's "Open Big Picture at login" switch writes a
+# file of the same name to ~/.config/autostart, which overrides this one.
+Type=Application
+Name=Steam Big Picture
+Comment=Start Steam's full-screen interface at login
+Exec=/usr/libexec/gts9wifi-steam --deck
+Icon=steam
+Terminal=false
+X-GNOME-Autostart-Delay=3
