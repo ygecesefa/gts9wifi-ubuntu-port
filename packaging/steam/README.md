@@ -121,7 +121,13 @@ tiled-resource tier for textures.
   `VKD3D_FEATURE_LEVEL=12_0 %command%` it gets past that check, vkd3d logs
   "Ignoring UpdateTileMapping calls on fallback reserved resource", and the
   game crashes about half a second later (access violation reading 0x8).
-  `-dx11` cannot help (no SM5 shaders). Not playable on this GPU for now.
+  `-dx11` cannot help (no SM5 shaders). The "steamdeck" branch is the same
+  (only `PCD3D_SM6` shader archives). Also tried, without success: Engine.ini
+  `r.Shadow.Virtual.AllocatePagePoolAsReservedResource=0`,
+  `r.SparseVolumeTexture.Streaming.UseReservedResources=0`,
+  `r.Nanite.Streaming.ReservedResources=0` (the tile-mapping warnings go
+  away, the same access violation stays), and `-nomovie`. Not playable on
+  this GPU for now.
 
 ## To be answered on the device
 
