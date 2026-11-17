@@ -68,8 +68,10 @@ Big Picture and its games are drawn at **1920x1200** and scaled to the
 image: [packaging/gamescope](../../packaging/gamescope/)). Much less work for
 the GPU, and in our tests games started reliably inside it (6 of 6) while
 the same game hung at start on the GNOME desktop (see Known issues).
-"Switch to Desktop" in Big Picture goes to the normal desktop with Steam in
-a window, and back.
+Power menu > "Switch to Desktop" goes to the normal desktop with Steam in a
+window; "Steam (Big Picture)" in the app grid goes back. Big Picture runs in
+SteamOS's gaming mode (`-steamos3`); Steam then waits for SteamOS helpers
+that do not exist here, and `gts9wifi-session-switch` does the switch.
 
 ### Galaxy Game Manager
 
@@ -85,10 +87,12 @@ An app (app grid) for:
   for 20 s. The chip slows itself down from 90-95 °C and powers off at
   110 °C; the battery limit is about how hot the tablet feels and how fast
   the battery ages.
-- **Emulators**: one tap installs RetroArch, DuckStation (PS1), Play! (PS2),
+- **Emulators**: the **InstAll Emulators** icon on the desktop (or a row
+  here) installs RetroArch, DuckStation (PS1), Play! (PS2),
   RPCS3 (PS3), PPSSPP (PSP), Dolphin (GameCube/Wii), melonDS (DS), Ryujinx
   and Eden (Switch), Flycast (Dreamcast), xemu (Xbox) and MAME from Flathub
-  (a few GB). Games, BIOS files and console keys are your own dumps.
+  (a few GB); the desktop icon goes away once they are in. Games, BIOS files
+  and console keys are your own dumps.
 - **Controllers**: test a controller, map one to keys (AntiMicroX, with the
   emulators). Xbox, DualShock/DualSense, Switch Pro/Joy-Con and Steam
   controller drivers are in the kernel; `steam-devices` is installed.
