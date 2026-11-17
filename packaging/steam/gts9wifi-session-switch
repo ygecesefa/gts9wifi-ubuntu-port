@@ -1,0 +1,71 @@
+#!/usr/bin/python3
+# Answers Steam's "Switch to Desktop" while Big Picture runs inside gamescope.
+#
+# In a gamescope session Steam does not run steamos-session-select; it asks
+# SteamOS's own daemon, steamos-manager, over the session bus
+# (com.steampowered.SteamOSManager1, interface ...SessionManagement1, method
+# SwitchToDesktopMode), and shows "Switching to Desktop..." until the
+# session goes away. Without that daemon it waited for ever.
+#
+# This program owns that bus name with only the SessionManagement1 interface,
+# and does what steamos-session-select does here: records the wanted mode
+# for gts9wifi-steam and closes Steam; the launcher then starts the other
+# mode. gts9wifi-steam runs it for as long as gamescope runs.
+
+import os
+import subprocess
+import sys
+
+from gi.repository import Gio, GLib
+
+NAME = "com.steampowered.SteamOSManager1"
+PATH = "/com/steampowered/SteamOSManager1"
+XML = """
+<node>
+  <interface name="com.steampowered.SteamOSManager1.SessionManagement1">
+    <method name="SwitchToDesktopMode"/>
+    <method name="SwitchToGameMode"/>
+    <method name="SwitchToLoginMode"/>
+  </interface>
+</node>
+"""
+ROOT = os.path.expanduser("~/.local/share/Steam")
+SWITCH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "gts9wifi-steam-switch")
+
+
+def switch(mode):
+    with open(SWITCH, "w") as f:
+        f.write(mode + "\n")
+    env = dict(os.environ, LD_LIBRARY_PATH=os.path.join(ROOT, "steamrtarm64"))
+    subprocess.Popen([os.path.join(ROOT, "steamrtarm64", "steam"), "-shutdown"],
+                     env=env, cwd=ROOT, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def on_call(_conn, _sender, _path, _iface, method, _params, invocation):
+    print("called:", method, flush=True)
+    if method == "SwitchToDesktopMode":
+        switch("desktop")
+    elif method == "SwitchToGameMode":
+        switch("gamescope")
+    invocation.return_value(None)
+
+
+def main():
+    info = Gio.DBusNodeInfo.new_for_xml(XML)
+    loop = GLib.MainLoop()
+
+    def on_bus(conn, _name):
+        conn.register_object(PATH, info.interfaces[0], on_call, None, None)
+
+    Gio.bus_own_name(Gio.BusType.SESSION, NAME, Gio.BusNameOwnerFlags.NONE,
+                     on_bus, None, lambda *_: loop.quit())
+    # End with the process that started us (gts9wifi-steam).
+    follow = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    if follow:
+        GLib.timeout_add_seconds(2, lambda: os.path.exists(f"/proc/{follow}") or loop.quit())
+    loop.run()
+
+
+if __name__ == "__main__":
+    main()

@@ -154,6 +154,8 @@ fi
 # "Switch to Desktop" / "Return to Gaming Mode" (see steamos-session-select).
 [ -x /usr/libexec/gts9wifi-steam-bin/steamos-session-select ] ||
 	install -D -m 755 "$HERE/steamos-session-select" "$STEAMROOT/gts9wifi-bin/steamos-session-select"
+[ -x /usr/libexec/gts9wifi-session-switch ] ||
+	install -m 755 "$HERE/gts9wifi-session-switch" "$STEAMROOT/gts9wifi-session-switch"
 manager=/usr/libexec/gts9wifi-game-manager
 if [ ! -x "$manager" ]; then
 	install -D -m 755 "$HERE/gts9wifi-game-manager" "$STEAMROOT/gts9wifi-game-manager"

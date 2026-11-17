@@ -108,8 +108,22 @@ gamescope=/usr/lib/gts9wifi-gamescope/bin/gamescope
 while :; do
 	rm -f "$switch"
 	if [ -n "$deck" ] && [ -n "$RESOLUTION" ] && [ -x "$gamescope" ]; then
+		# Inside gamescope Steam asks steamos-manager over D-Bus to switch
+		# to the desktop instead (gts9wifi-session-switch answers).
+		sw=
+		for d in /usr/libexec "$STEAMROOT"; do
+			if [ -x "$d/gts9wifi-session-switch" ]; then
+				env PATH="$SYSTEM_PATH" LD_LIBRARY_PATH="$SYSTEM_LD_LIBRARY_PATH" \
+					"$d/gts9wifi-session-switch" $$ >/dev/null 2>&1 &
+				sw=$!
+				break
+			fi
+		done
 		"$gamescope" -w "${RESOLUTION%x*}" -h "${RESOLUTION#*x}" -f -e -- \
 			"$RT/steam" -gamepadui "$@"
+		rc=$?
+		[ -z "$sw" ] || kill "$sw" 2>/dev/null
+		( exit "$rc" )
 	elif [ -n "$deck" ]; then
 		"$RT/steam" -gamepadui "$@"
 	else
