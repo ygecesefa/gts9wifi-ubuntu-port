@@ -106,6 +106,23 @@ was removed again), and the frame cap and the overlay are off by default and
 marked experimental in the Game Manager. Why three unrelated things have the
 same effect is not understood; other games are untested.
 
+## Games that need more than this GPU offers
+
+Turnip on the Adreno 740 (Mesa 26.3.0) has `sparseBinding` and
+`sparseResidencyBuffer` but not `sparseResidencyImage2D`: Mesa offers it only
+on GPUs with `ubwc_all_formats_compatible` (a hardware property, not set for
+the 740). vkd3d-proton therefore reports D3D12 feature level 11_1 and no
+tiled-resource tier for textures.
+
+- Subliminal (UE 5, ships SM5 and SM6 shaders) falls back to its SM5 path
+  and runs.
+- WILL: Follow the Light (UE 5.4.4, ships **only** SM6 / `PCD3D_SM6`
+  shaders): "DirectX 12 is not supported on your system". With
+  `VKD3D_FEATURE_LEVEL=12_0 %command%` it gets past that check, vkd3d logs
+  "Ignoring UpdateTileMapping calls on fallback reserved resource", and the
+  game crashes about half a second later (access violation reading 0x8).
+  `-dx11` cannot help (no SM5 shaders). Not playable on this GPU for now.
+
 ## To be answered on the device
 
 - Does a game start (pressure-vessel container, Proton ARM64)?
