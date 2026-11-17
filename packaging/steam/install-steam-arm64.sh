@@ -151,6 +151,15 @@ if [ ! -x /usr/libexec/gts9wifi-game-session ]; then
 	systemctl --user daemon-reload
 	systemctl --user enable --now gts9wifi-game-session.service
 fi
+# A Big Picture icon on the desktop too (GNOME's desktop icons start only
+# files marked as trusted).
+desktop_dir=$(xdg-user-dir DESKTOP 2>/dev/null || true)
+if [ -n "$desktop_dir" ] && [ "$desktop_dir" != "$HOME" ] && [ -d "$desktop_dir" ]; then
+	install -m 755 "$HOME/.local/share/applications/steam-bigpicture.desktop" \
+		"$desktop_dir/Steam Big Picture.desktop"
+	gio set "$desktop_dir/Steam Big Picture.desktop" metadata::trusted true 2>/dev/null || true
+fi
+
 # "Switch to Desktop" / "Return to Gaming Mode" (see steamos-session-select).
 [ -x /usr/libexec/gts9wifi-steam-bin/steamos-session-select ] ||
 	install -D -m 755 "$HERE/steamos-session-select" "$STEAMROOT/gts9wifi-bin/steamos-session-select"
