@@ -22,6 +22,10 @@
 #
 # Settings (~/.config/gts9wifi/steam.conf, re-read when the file changes):
 #   KEEP_AWAKE=0|1 (1)   LOCK_ROTATION=0|1 (1)   HEAT_GUARD=0|1 (1)
+#   STOP_WAYDROID=0|1 (1) close the Android session (Waydroid) when a game
+#                        starts. Frozen in the background it still held
+#                        ~250 MB of RAM and ~2.5 GB in zram swap (measured
+#                        during a game); it is not started again afterwards
 #   HEAT_CPU_MAX=100     °C, hottest cpu*/gpu* thermal zone. The kernel slows
 #                        the CPU from 90-95 °C on and powers off at 110 °C,
 #                        so a game normally sits below this
@@ -41,7 +45,7 @@ CONF = os.path.join(
     os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
     "gts9wifi", "steam.conf")
 STEAMAPPS = os.path.expanduser("~/.local/share/Steam/steamapps")
-DEFAULTS = {"KEEP_AWAKE": 1, "LOCK_ROTATION": 1, "HEAT_GUARD": 1,
+DEFAULTS = {"KEEP_AWAKE": 1, "LOCK_ROTATION": 1, "HEAT_GUARD": 1, "STOP_WAYDROID": 1,
             "HEAT_CPU_MAX": 100, "HEAT_BATTERY_MAX": 45}
 HOLD = 20          # seconds a limit must be exceeded
 INTERVAL = 2       # while a game runs
@@ -225,12 +229,29 @@ def notify(title, body):
         pass
 
 
+def waydroid_running():
+    return os.path.isdir("/sys/fs/cgroup/lxc.payload.waydroid")
+
+
+def stop_waydroid():
+    try:
+        subprocess.run(["waydroid", "session", "stop"], timeout=60,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 class Session:
     def __init__(self):
         self.inhibitor = None
         self.rotation_before = None
+        self.waydroid_done = False      # once per game, not on every loop
 
     def enter(self, conf):
+        if conf["STOP_WAYDROID"] and not self.waydroid_done:
+            self.waydroid_done = True
+            if waydroid_running():
+                stop_waydroid()
         if conf["KEEP_AWAKE"] and self.inhibitor is None:
             try:
                 self.inhibitor = subprocess.Popen(
@@ -246,6 +267,7 @@ class Session:
                     gsettings("set", *ROTATION, "true")
 
     def leave(self):
+        self.waydroid_done = False
         if self.inhibitor is not None:
             self.inhibitor.terminate()
             self.inhibitor = None

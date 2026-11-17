@@ -213,7 +213,9 @@ class Window(Adw.ApplicationWindow):
                 ("KEEP_AWAKE", "Keep the screen on",
                  "No dimming or sleep in the middle of a game"),
                 ("LOCK_ROTATION", "Lock screen rotation",
-                 "Put back to your own setting when the game ends")):
+                 "Put back to your own setting when the game ends"),
+                ("STOP_WAYDROID", "Close Android (Waydroid)",
+                 "Frees memory for the game. Open Android again from the app grid")):
             row = Adw.SwitchRow(title=title, subtitle=subtitle)
             row.set_active(self.conf.get(key, "1") != "0")
             row.connect("notify::active", self.on_default_on, key)
