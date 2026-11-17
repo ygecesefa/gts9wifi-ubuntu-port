@@ -205,8 +205,10 @@ def trust_steam_shortcuts():
                 continue
             _seen_shortcuts[path] = mtime
             with open(path, errors="replace") as f:
-                if "\nExec=steam steam://rungameid/" not in f.read():
-                    continue
+                text = f.read()
+            if ("\nExec=steam steam://rungameid/" not in text and
+                    "\nExec=/usr/libexec/gts9wifi-game-manager --install-emulators" not in text):
+                continue
             os.chmod(path, os.stat(path).st_mode | 0o100)
             subprocess.run(["gio", "set", path, "metadata::trusted", "true"], timeout=10)
         except (OSError, subprocess.SubprocessError):

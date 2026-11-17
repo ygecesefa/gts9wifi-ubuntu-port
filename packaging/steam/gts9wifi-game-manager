@@ -78,6 +78,18 @@ def set_autostart(on):
     os.replace(AUTOSTART_USER + ".tmp", AUTOSTART_USER)
 
 
+EMU_SHORTCUT = "InstAll Emulators.desktop"   # on the desktop (image, first login)
+
+
+def desktop_dir():
+    try:
+        d = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True,
+                           timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return d if d and os.path.realpath(d) != os.path.realpath(os.path.expanduser("~")) else None
+
+
 def flatpak_installed(appid):
     return any(os.path.isdir(os.path.join(base, "app", appid)) for base in (
         "/var/lib/flatpak", os.path.expanduser("~/.local/share/flatpak")))
@@ -263,6 +275,9 @@ class Window(Adw.ApplicationWindow):
             self.emu_row.add_suffix(Gtk.Image.new_from_icon_name("folder-download-symbolic"))
             self.emu_row.connect("activated", self.on_install_emulators, [e[0] for e in missing])
             group.add(self.emu_row)
+            if app.auto_install:
+                GLib.idle_add(lambda: self.on_install_emulators(
+                    self.emu_row, [e[0] for e in missing]) and False)
         if emus:
             for appid, name, plays in emus:
                 row = Adw.ActionRow(title=name, subtitle=plays, activatable=True)
@@ -364,6 +379,12 @@ class Window(Adw.ApplicationWindow):
             proc.wait_check_finish(result)
             self.toasts.add_toast(Adw.Toast(title="Emulators installed. Reopen this app to see them"))
             self.emu_row.set_subtitle("Installed")
+            d = desktop_dir()
+            if d:
+                try:
+                    os.remove(os.path.join(d, EMU_SHORTCUT))
+                except OSError:
+                    pass
         except GLib.Error:
             self.emu_row.set_sensitive(True)
             self.emu_row.set_subtitle("Not installed (no network, or cancelled). Tap to try again")
@@ -432,9 +453,10 @@ class Window(Adw.ApplicationWindow):
 
 
 class App(Adw.Application):
-    def __init__(self):
+    def __init__(self, auto_install=False):
         super().__init__(application_id="io.github.gts9wifi.GameManager",
                          flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.auto_install = auto_install
 
     def do_activate(self):
         win = self.props.active_window or Window(self)
@@ -442,4 +464,7 @@ class App(Adw.Application):
 
 
 if __name__ == "__main__":
-    sys.exit(App().run(sys.argv))
+    # --install-emulators: the desktop shortcut; opens the window and starts
+    # installing the emulators that are missing.
+    auto = "--install-emulators" in sys.argv
+    sys.exit(App(auto).run([a for a in sys.argv if a != "--install-emulators"]))

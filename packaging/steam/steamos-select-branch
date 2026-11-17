@@ -1,0 +1,8 @@
+#!/bin/sh
+# SteamOS stand-in: Steam in gaming mode (-steamos3) asks for the OS update
+# branch every few seconds. This image is updated with apt, not by Steam.
+case "${1:-}" in
+	-c) echo rel ;;
+	-l) echo rel ;;
+esac
+exit 0

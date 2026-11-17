@@ -92,6 +92,12 @@ fi
 # streams in pw-top, heard as crackling). 60 ms is the usual value for Wine.
 export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-60}"
 
+# Our SteamOS stand-ins (steamos-session-select, steamos-select-branch).
+# Steam runs system commands with SYSTEM_PATH, so they go on both.
+for d in /usr/libexec/gts9wifi-steam-bin "$STEAMROOT/gts9wifi-bin"; do
+	[ -x "$d/steamos-session-select" ] && { PATH="$d:$PATH"; break; }
+done
+
 rtfiles=$(ls -d "$RT/pv-runtime/steam-runtime-steamrt-arm64"/steamrt3c_platform_*/files 2>/dev/null | head -n 1)
 export SYSTEM_PATH="$PATH"
 # steam-runtime-launcher-service and friends: the client starts them by name.
@@ -102,13 +108,9 @@ export LD_LIBRARY_PATH="$RT${rtfiles:+:$rtfiles/lib/aarch64-linux-gnu:$rtfiles/l
 mkdir -p "$STEAMROOT/logs"
 cd "$STEAMROOT" || exit 1
 
-# "Switch to Desktop" / "Return to Gaming Mode" run steamos-session-select,
-# which on SteamOS changes the login session. Ours (next to this script, or
-# /usr/libexec/gts9wifi-steam-bin in the image) writes the wanted mode to
-# $switch and closes Steam; the loop below then starts the other mode.
-for d in /usr/libexec/gts9wifi-steam-bin "$STEAMROOT/gts9wifi-bin"; do
-	[ -x "$d/steamos-session-select" ] && { PATH="$d:$PATH"; break; }
-done
+# "Switch to Desktop" / "Return to Gaming Mode": steamos-session-select or
+# gts9wifi-session-switch write the wanted mode to $switch and close Steam;
+# the loop below then starts the other mode.
 switch="${XDG_RUNTIME_DIR:-/tmp}/gts9wifi-steam-switch"
 
 # gamescope: -w/-h is the size games see and draw at, -f fills the screen
@@ -131,8 +133,12 @@ while :; do
 				break
 			fi
 		done
+		# -steamos3: Steam treats the session as SteamOS's gaming mode, so
+		# "Switch to Desktop" runs steamos-session-select (as gamescope
+		# sessions of other distributions do). Without it Steam only showed
+		# "Switching to Desktop..." and waited.
 		"$gamescope" -w "${RESOLUTION%x*}" -h "${RESOLUTION#*x}" -f -e -- \
-			"$RT/steam" -gamepadui "$@"
+			"$RT/steam" -gamepadui -steamos3 "$@"
 		rc=$?
 		[ -z "$sw" ] || kill "$sw" 2>/dev/null
 		( exit "$rc" )

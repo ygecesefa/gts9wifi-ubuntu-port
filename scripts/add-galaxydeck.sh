@@ -95,6 +95,7 @@ install -m 0755 "$steam/gts9wifi-game-manager" "$rootfs/usr/libexec/gts9wifi-gam
 install -m 0755 "$steam/gts9wifi-game-session" "$rootfs/usr/libexec/gts9wifi-game-session"
 install -m 0755 "$steam/gts9wifi-session-switch" "$rootfs/usr/libexec/gts9wifi-session-switch"
 install -D -m 0755 "$steam/steamos-session-select" "$rootfs/usr/libexec/gts9wifi-steam-bin/steamos-session-select"
+install -D -m 0755 "$steam/steamos-select-branch" "$rootfs/usr/libexec/gts9wifi-steam-bin/steamos-select-branch"
 install -D -m 0644 "$steam/gts9wifi-game-session.service" "$rootfs/usr/lib/systemd/user/gts9wifi-game-session.service"
 chroot "$rootfs" systemctl --global enable gts9wifi-game-session.service >/dev/null
 # Steam's own shortcuts call "steam steam://rungameid/N".
@@ -150,6 +151,25 @@ if [ -n "$home" ] && [ -d "$rootfs$home" ] && [ ! -e "$rootfs$home/.config/gts9w
 	install -d "$rootfs$home/.config/gts9wifi"
 	cp "$rootfs/etc/skel/.config/gts9wifi/steam.conf" "$rootfs$home/.config/gts9wifi/"
 	chroot "$rootfs" chown -R "$user:$user" "$home/.config"
+fi
+
+# A desktop icon for the emulators, so a new user sees them: it opens the
+# Game Manager and starts the install; the icon goes away once they are in.
+install -d "$rootfs/etc/skel/Desktop"
+cat > "$rootfs/etc/skel/Desktop/InstAll Emulators.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=InstAll Emulators
+Comment=RetroArch, PlayStation 1-3, PSP, GameCube/Wii, DS, Switch, Dreamcast, Xbox and arcade emulators from Flathub (a few GB)
+Exec=/usr/libexec/gts9wifi-game-manager --install-emulators
+Icon=folder-download
+Terminal=false
+EOF
+chmod 0755 "$rootfs/etc/skel/Desktop/InstAll Emulators.desktop"
+if [ -n "$home" ] && [ -d "$rootfs$home" ]; then
+	install -d "$rootfs$home/Desktop"
+	install -m 0755 "$rootfs/etc/skel/Desktop/InstAll Emulators.desktop" "$rootfs$home/Desktop/"
+	chroot "$rootfs" chown -R "$user:$user" "$home/Desktop"
 fi
 
 # --- console-style login -----------------------------------------------------

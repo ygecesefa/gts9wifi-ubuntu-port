@@ -11,10 +11,17 @@
 # and does what steamos-session-select does here: records the wanted mode
 # for gts9wifi-steam and closes Steam; the launcher then starts the other
 # mode. gts9wifi-steam runs it for as long as gamescope runs.
+#
+# In practice (client 1794536281, started with -steamos3) Steam did not call
+# it: it looks for steamos-manager elsewhere, logs "No SteamOSManager support
+# for SwitchToDesktop, using legacy path" and "Switching to session ..." to
+# logs/steamui_steamos.txt, and then waits. So this program also follows that
+# log and switches when that line appears.
 
 import os
 import subprocess
 import sys
+import time
 
 from gi.repository import Gio, GLib
 
@@ -51,9 +58,47 @@ def on_call(_conn, _sender, _path, _iface, method, _params, invocation):
     invocation.return_value(None)
 
 
+LOG = os.path.join(ROOT, "logs", "steamui_steamos.txt")
+
+
+def follow_log():
+    """Called every second: switch when Steam logs a desktop switch."""
+    try:
+        size = os.path.getsize(LOG)
+    except OSError:
+        size = 0
+    if size < follow_log.pos:          # Steam rotated or rewrote the log
+        follow_log.pos = 0
+    if size > follow_log.pos:
+        with open(LOG, "rb") as f:
+            f.seek(follow_log.pos)
+            new = f.read().decode("utf-8", "replace")
+        follow_log.pos = size
+        # Only lines written after we started: Steam rewrites this log when
+        # it starts, old switch lines included.
+        for line in new.splitlines():
+            if "YldSwitchToDesktop: Switching to session" not in line:
+                continue
+            try:
+                when = time.mktime(time.strptime(line[1:20], "%Y-%m-%d %H:%M:%S"))
+            except ValueError:
+                continue
+            if when >= follow_log.start - 1:
+                print("switch requested in", LOG, flush=True)
+                switch("desktop")
+                return False
+    return True
+
+
 def main():
     info = Gio.DBusNodeInfo.new_for_xml(XML)
     loop = GLib.MainLoop()
+    follow_log.start = time.time()
+    try:
+        follow_log.pos = os.path.getsize(LOG)    # only what happens from now on
+    except OSError:
+        follow_log.pos = 0
+    GLib.timeout_add_seconds(1, follow_log)
 
     def on_bus(conn, _name):
         conn.register_object(PATH, info.interfaces[0], on_call, None, None)
