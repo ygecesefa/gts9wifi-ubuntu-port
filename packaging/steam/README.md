@@ -85,7 +85,23 @@ warnings that a good start does not have; GNOME then offers "Force Quit".
 | unloaded | **MangoHud fps_limit=30** | on, hidden | hangs (1 of 1) |
 | unloaded | none | **on** | hangs (1 of 1) |
 
-So: `ntsync` is **not** loaded at boot (the modules-load.d file added for it
+**Correction (2026-11-17).** The table above judged "starts" by the log, and
+the next day the game also hung with none of the three, from desktop Steam
+(3 of 3). Measured again with the game process's CPU time and whether its
+intro sequence (`FadeIn_INST`) runs:
+
+| where the game runs | result |
+|---|---|
+| desktop Steam, game window on GNOME at 2560x1600 | hangs (3 of 3; 4 more the day before) |
+| Big Picture inside gamescope, 1920x1200 | runs (6 of 6) |
+
+So the hang belongs to running the game directly on the GNOME desktop
+(Xwayland, 2560x1600), and gamescope avoids it; the ntsync / cap / overlay
+results above may be the same thing. Play from Big Picture with a
+resolution set in the Game Manager (the default with "Open Big Picture at
+login").
+
+Kept for now: `ntsync` is **not** loaded at boot (the modules-load.d file added for it
 was removed again), and the frame cap and the overlay are off by default and
 marked experimental in the Game Manager. Why three unrelated things have the
 same effect is not understood; other games are untested.
