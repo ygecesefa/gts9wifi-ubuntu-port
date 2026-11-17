@@ -30,10 +30,22 @@
 STEAMROOT="$HOME/.local/share/Steam"
 RT="$STEAMROOT/steamrtarm64"
 
-[ -x "$RT/steam" ] || {
-	echo "gts9wifi-steam: Steam is not installed; run install-steam-arm64.sh" >&2
-	exit 1
-}
+# First start in the image: download Valve's client (gts9wifi-steam-install,
+# a copy of install-steam-arm64.sh). Needs a network.
+if [ ! -x "$RT/steam" ]; then
+	installer=/usr/libexec/gts9wifi-steam-install
+	if [ ! -x "$installer" ]; then
+		echo "gts9wifi-steam: Steam is not installed; run install-steam-arm64.sh" >&2
+		exit 1
+	fi
+	notify-send -a Steam -i steam "Setting up Steam" \
+		"Downloading Valve's Steam client. This takes a few minutes the first time." 2>/dev/null || true
+	if ! "$installer" >"${XDG_RUNTIME_DIR:-/tmp}/gts9wifi-steam-install.log" 2>&1; then
+		notify-send -u critical -a Steam -i dialog-error "Steam could not be set up" \
+			"Connect to the internet and open Steam again." 2>/dev/null || true
+		exit 1
+	fi
+fi
 
 deck=
 if [ "${1:-}" = --deck ]; then

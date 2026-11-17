@@ -250,11 +250,20 @@ class Window(Adw.ApplicationWindow):
 
         # --- emulators and controllers --------------------------------------
         emus = [e for e in EMULATORS if flatpak_installed(e[0])]
+        missing = [e for e in EMULATORS if not flatpak_installed(e[0])]
+        group = Adw.PreferencesGroup(
+            title="Emulators",
+            description="Screen, rotation and heat protection apply to these too.")
+        page.add(group)
+        if missing:
+            self.emu_row = Adw.ActionRow(
+                title="Install emulators" if not emus else "Install the other emulators",
+                subtitle=", ".join(e[1] for e in missing) + ". From Flathub, a few GB; "
+                         "asks for your password", activatable=True)
+            self.emu_row.add_suffix(Gtk.Image.new_from_icon_name("folder-download-symbolic"))
+            self.emu_row.connect("activated", self.on_install_emulators, [e[0] for e in missing])
+            group.add(self.emu_row)
         if emus:
-            group = Adw.PreferencesGroup(
-                title="Emulators",
-                description="Screen, rotation and heat protection apply to these too.")
-            page.add(group)
             for appid, name, plays in emus:
                 row = Adw.ActionRow(title=name, subtitle=plays, activatable=True)
                 row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
@@ -337,6 +346,27 @@ class Window(Adw.ApplicationWindow):
         else:
             self.conf.pop(key, None)
         self.save()
+
+    def on_install_emulators(self, row, ids):
+        row.set_sensitive(False)
+        row.set_subtitle("Installing… this can take a while")
+        try:
+            proc = Gio.Subprocess.new(
+                ["flatpak", "install", "--system", "-y", "--noninteractive", "flathub", *ids],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error:
+            row.set_subtitle("flatpak is not available")
+            return
+        proc.wait_check_async(None, self.on_emulators_done)
+
+    def on_emulators_done(self, proc, result):
+        try:
+            proc.wait_check_finish(result)
+            self.toasts.add_toast(Adw.Toast(title="Emulators installed. Reopen this app to see them"))
+            self.emu_row.set_subtitle("Installed")
+        except GLib.Error:
+            self.emu_row.set_sensitive(True)
+            self.emu_row.set_subtitle("Not installed (no network, or cancelled). Tap to try again")
 
     def on_run(self, _row, argv):
         subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,

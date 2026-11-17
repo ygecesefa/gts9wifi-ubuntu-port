@@ -490,7 +490,14 @@ if ! chroot "$rootfs" id "$user" >/dev/null 2>&1; then
 		chroot "$rootfs" useradd -m -s /bin/bash -G sudo,video,audio,input "$user"
 fi
 echo "$user:$password" | chroot "$rootfs" chpasswd
-chroot "$rootfs" passwd -e "$user" >/dev/null   # change the test password on first login
+if [ "${GTS9WIFI_GALAXYDECK:-1}" = 1 ]; then
+	# GalaxyDeck (console-style login, Steam, gamescope, Game Manager). It
+	# logs in automatically, so the password is not expired here; a
+	# notification asks the user to change it.
+	"$repo/scripts/add-galaxydeck.sh" "$rootfs" "$user"
+else
+	chroot "$rootfs" passwd -e "$user" >/dev/null   # change the test password on first login
+fi
 
 echo "== 5/6 initramfs for $krel"
 for d in proc sys dev; do mount --bind "/$d" "$rootfs/$d"; done
