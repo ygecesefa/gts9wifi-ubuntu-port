@@ -1,0 +1,23 @@
+# Builds gamescope for Ubuntu 24.04 arm64 with
+# packaging/gamescope/build-gamescope.sh.  Run by hand: Actions -> gamescope
+# -> Run workflow.  The tarball comes out as a workflow artifact.
+name: gamescope
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build gamescope
+        run: bash packaging/gamescope/build-gamescope.sh "$HOME/gamescope-build"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamescope-gts9wifi-${{ github.sha }}
+          path: ~/gamescope-build/out/
+          retention-days: 3

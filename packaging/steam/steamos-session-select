@@ -1,0 +1,19 @@
+#!/bin/sh
+# steamos-session-select SESSION
+#
+# Steam's Big Picture runs this for "Switch to Desktop" (SESSION = plasma,
+# desktop, ...) and the desktop client for "Return to Gaming Mode"
+# (SESSION = gamescope). On SteamOS it switches the login session; here it
+# tells gts9wifi-steam which mode to start next and closes Steam, and the
+# launcher starts Steam again in that mode: desktop = the normal client in
+# the GNOME session, gamescope = Big Picture (inside gamescope when a
+# resolution is set in the Game Manager).
+
+case "${1:-}" in
+	gamescope) mode=gamescope ;;
+	*) mode=desktop ;;
+esac
+dir="${XDG_RUNTIME_DIR:-/tmp}"
+echo "$mode" > "$dir/gts9wifi-steam-switch"
+root="$HOME/.local/share/Steam"
+LD_LIBRARY_PATH="$root/steamrtarm64" exec "$root/steamrtarm64/steam" -shutdown

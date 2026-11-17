@@ -1,0 +1,9 @@
+# Solaar (Logitech device manager, in the image) creates a virtual keyboard
+# "solaar-keyboard" through uinput as soon as it starts, for its key-remapping
+# rules. GNOME takes it for an attached hardware keyboard and leaves touch
+# mode: the on-screen keyboard no longer opens (also not on the lock screen)
+# and the auto-rotate button disappears from the quick settings.
+# Hidden from libinput, so the desktop never sees it. Solaar's settings,
+# battery display and pairing are not affected; only its rules that type keys
+# stop having an effect.
+SUBSYSTEM=="input", ATTRS{name}=="solaar-keyboard", ENV{LIBINPUT_IGNORE_DEVICE}="1"

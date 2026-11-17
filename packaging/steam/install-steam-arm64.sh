@@ -110,6 +110,13 @@ if [ ! -x "$launcher" ]; then           # not in the image: use the copy next to
 	install -D -m 755 "$HERE/gts9wifi-steam" "$STEAMROOT/gts9wifi-steam"
 	launcher="$STEAMROOT/gts9wifi-steam"
 fi
+# The shortcuts Steam itself creates call "steam steam://rungameid/N". In the
+# image that is /usr/bin/steam; here ~/.local/bin, which Ubuntu puts on PATH
+# at the next login if it exists.
+if ! command -v steam >/dev/null; then
+	mkdir -p "$HOME/.local/bin"
+	ln -fsn "$launcher" "$HOME/.local/bin/steam"
+fi
 mkdir -p "$HOME/.local/share/applications"
 cat > "$HOME/.local/share/applications/steam.desktop" <<EOF
 [Desktop Entry]
@@ -144,6 +151,9 @@ if [ ! -x /usr/libexec/gts9wifi-game-session ]; then
 	systemctl --user daemon-reload
 	systemctl --user enable --now gts9wifi-game-session.service
 fi
+# "Switch to Desktop" / "Return to Gaming Mode" (see steamos-session-select).
+[ -x /usr/libexec/gts9wifi-steam-bin/steamos-session-select ] ||
+	install -D -m 755 "$HERE/steamos-session-select" "$STEAMROOT/gts9wifi-bin/steamos-session-select"
 manager=/usr/libexec/gts9wifi-game-manager
 if [ ! -x "$manager" ]; then
 	install -D -m 755 "$HERE/gts9wifi-game-manager" "$STEAMROOT/gts9wifi-game-manager"

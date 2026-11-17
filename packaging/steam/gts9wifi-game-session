@@ -10,6 +10,10 @@
 #                           stays at its limit for 20 s, the game is closed
 #                           and a notification says why
 #
+# It also marks the desktop shortcuts Steam creates ("Add desktop shortcut":
+# Exec=steam steam://rungameid/N) as trusted. GNOME's desktop icons refuse
+# to start a .desktop file without that mark and show it with a red cross.
+#
 # "A game runs" = Steam's "reaper SteamLaunch AppId=N -- ..." process exists
 # (every process of the game is a descendant of it; Steam itself is never
 # closed), or one of the emulators in EMULATORS is open (Flatpak puts each
@@ -179,6 +183,32 @@ def temperatures():
     return cpu, battery
 
 
+_seen_shortcuts = {}
+
+
+def trust_steam_shortcuts():
+    try:
+        desktop = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True,
+                                 text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return
+    if not desktop or os.path.realpath(desktop) == os.path.realpath(os.path.expanduser("~")):
+        return
+    for path in glob.glob(os.path.join(glob.escape(desktop), "*.desktop")):
+        try:
+            mtime = os.stat(path).st_mtime
+            if _seen_shortcuts.get(path) == mtime:
+                continue
+            _seen_shortcuts[path] = mtime
+            with open(path, errors="replace") as f:
+                if "\nExec=steam steam://rungameid/" not in f.read():
+                    continue
+            os.chmod(path, os.stat(path).st_mode | 0o100)
+            subprocess.run(["gio", "set", path, "metadata::trusted", "true"], timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
 def gsettings(*args):
     try:
         return subprocess.run(["gsettings", *args], capture_output=True, text=True,
@@ -242,6 +272,7 @@ def main():
                 if session.inhibitor or session.rotation_before:
                     session.leave()         # applied again below with the new settings
 
+            trust_steam_shortcuts()
             steam, emus = steam_games(), emulators()
             running = bool(steam or emus)
             if running:

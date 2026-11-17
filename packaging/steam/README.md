@@ -18,8 +18,9 @@ Vulkan driver (Mesa Turnip).
 |---|---|
 | `install-steam-arm64.sh` | run as the user: downloads the client bootstrap and the Steam Linux Runtime 3 (ARM64) from Valve, checks both against Valve's checksums, writes the menu entry. Touches only `$HOME` |
 | `gts9wifi-steam` | the launcher (`--deck` = full-screen controller interface). Image path: `/usr/libexec/gts9wifi-steam` |
-| `gts9wifi-game-manager` | "Galaxy Game Manager", a small GTK4/libadwaita app for the launcher's settings (`~/.config/gts9wifi/steam.conf`): frame rate limit for every Proton game (`DXVK_FRAME_RATE`, `VKD3D_FRAME_RATE`), MangoHud overlay, newer or system Vulkan driver, open/restart Steam. Image path: `/usr/libexec/gts9wifi-game-manager` |
+| `gts9wifi-game-manager` | "Galaxy Game Manager", a small GTK4/libadwaita app for the launcher's settings (`~/.config/gts9wifi/steam.conf`): Big Picture resolution (gamescope, `RESOLUTION=1920x1200`), frame rate limit and MangoHud overlay (both experimental, see below), newer or system Vulkan driver, open/restart Steam. Image path: `/usr/libexec/gts9wifi-game-manager` |
 | `gts9wifi-game-session` | started by the launcher, ends with it. While a game runs (Steam's `reaper SteamLaunch AppId=N` process exists): keeps the screen on (idle inhibitor), locks rotation and puts it back afterwards, and **heat protection**: when the hottest CPU/GPU sensor (default 100 °C) or the battery (default 45 °C) stays at its limit for 20 s, the game's processes are closed and a notification says why. Steam itself is not closed. Tested on the tablet with a stand-in game and a 30 °C limit. Image path: `/usr/libexec/gts9wifi-game-session` |
+| `steamos-session-select` | Steam's "Switch to Desktop" (Big Picture) and "Return to Gaming Mode" (desktop client) run this SteamOS command. Without it Steam closed and took gamescope down with it ("IWaitable hung up. Aborting"). Ours tells the launcher which mode to start next and closes Steam; the launcher restarts it in that mode. Tested on the tablet both ways (with the command run the way Steam runs it). Image path: `/usr/libexec/gts9wifi-steam-bin/steamos-session-select` |
 | `apparmor/gts9wifi-steam` | **not needed with this port's kernel** (mainline 7.2 has no `kernel.apparmor_restrict_unprivileged_userns`; user namespaces just work). Kept for an Ubuntu kernel, where 24.04 denies them to programs without a profile. Path: `/etc/apparmor.d/gts9wifi-steam` |
 
 ## Where it comes from
@@ -65,6 +66,27 @@ Remove: `rm -rf ~/.local/share/Steam ~/.steam ~/.local/share/applications/steam.
 - It runs `../steamrtarm32/gldriverquery` and `vulkandriverquery`, a
   directory Valve does not ship: `steamrtarm32` is a link to `steamrtarm64`
   (installer; Switchdeck does the same).
+
+## What breaks a game's start (measured 2026-11-16)
+
+Subliminal (UE5, D3D12 through vkd3d-proton, Proton 11.0-2 ARM64, Turnip
+26.3.0), started nine times from the same Steam, 75 s each. A hanging start
+shows as the frame counter in the game's log standing still after a few
+hundred frames, right after two "Glyph texture is too large ... 5211x18204"
+warnings that a good start does not have; GNOME then offers "Force Quit".
+
+| ntsync module | frame cap | MangoHud | result |
+|---|---|---|---|
+| unloaded | none | off | starts (3 of 3) |
+| **loaded** | none | off | hangs (3 of 3) |
+| unloaded | **VKD3D_FRAME_RATE=30** | off | hangs (1 of 1) |
+| unloaded | **MangoHud fps_limit=30** | on, hidden | hangs (1 of 1) |
+| unloaded | none | **on** | hangs (1 of 1) |
+
+So: `ntsync` is **not** loaded at boot (the modules-load.d file added for it
+was removed again), and the frame cap and the overlay are off by default and
+marked experimental in the Game Manager. Why three unrelated things have the
+same effect is not understood; other games are untested.
 
 ## To be answered on the device
 

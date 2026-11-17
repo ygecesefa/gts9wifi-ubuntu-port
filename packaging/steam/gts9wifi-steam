@@ -13,12 +13,17 @@
 # Settings: ~/.config/gts9wifi/steam.conf, lines of NAME=value, written by
 # the Game Manager app (gts9wifi-game-manager). They are read when Steam
 # starts, so a change needs Steam to be restarted.
-#   FPS_LIMIT=45     cap every Proton game (DXVK and vkd3d-proton honour it):
-#                    less heat, steadier frame times. 0 or absent = no cap
-#   HUD=1            MangoHud overlay (frame rate, CPU/GPU load, temperatures);
-#                    needs the package mangohud
+#   FPS_LIMIT=45     cap every game's frame rate (MangoHud's limiter): less
+#                    heat, steadier frame times. 0 or absent = no cap
+#   HUD=1            MangoHud overlay (frame rate, CPU/GPU load, temperatures)
+# Both need the package mangohud.
 #   SYSTEM_MESA=1    use the system's Vulkan driver instead of the newer
 #                    Turnip of packaging/turnip
+#   RESOLUTION=1920x1200
+#                    Big Picture only (--deck): run Steam and its games inside
+#                    gamescope (packaging/gamescope), drawn at this size and
+#                    scaled to the panel. Absent = the panel's own size,
+#                    no gamescope
 # KEEP_AWAKE, LOCK_ROTATION and HEAT_* belong to gts9wifi-game-session (a
 # user service of its own).
 
@@ -30,28 +35,38 @@ RT="$STEAMROOT/steamrtarm64"
 	exit 1
 }
 
-flags=()
+deck=
 if [ "${1:-}" = --deck ]; then
 	shift
-	flags+=(-gamepadui)
+	deck=1
 fi
 
 conf="${XDG_CONFIG_HOME:-$HOME/.config}/gts9wifi/steam.conf"
-FPS_LIMIT='' HUD='' SYSTEM_MESA="${GTS9WIFI_STEAM_SYSTEM_MESA:-}"
+FPS_LIMIT='' HUD='' RESOLUTION='' SYSTEM_MESA="${GTS9WIFI_STEAM_SYSTEM_MESA:-}"
 if [ -r "$conf" ]; then
 	while IFS='=' read -r name value; do
 		case "$name" in
 			FPS_LIMIT) case "$value" in ''|*[!0-9]*) ;; *) FPS_LIMIT=$value ;; esac ;;
 			HUD) [ "$value" != 1 ] || HUD=1 ;;
+			RESOLUTION) case "$value" in *[!0-9x]*|x*|*x|*x*x*) ;; *x*) RESOLUTION=$value ;; esac ;;
 			SYSTEM_MESA) [ "$value" != 1 ] || SYSTEM_MESA=1 ;;
 		esac
 	done < "$conf"
 fi
 
-if [ -n "$FPS_LIMIT" ] && [ "$FPS_LIMIT" != 0 ]; then
-	export DXVK_FRAME_RATE="$FPS_LIMIT" VKD3D_FRAME_RATE="$FPS_LIMIT"
+# The cap is MangoHud's limiter (a Vulkan layer, so it covers DXVK,
+# vkd3d-proton and native Vulkan alike).
+# Both settings are off unless chosen, and experimental: Subliminal (UE5,
+# D3D12, Proton 11.0-2 ARM64) stops drawing a few hundred frames after its
+# start, every time, with the overlay on, with this cap, and equally with
+# VKD3D_FRAME_RATE; it starts every time with none of them (README.md).
+hud_config=
+[ -z "$FPS_LIMIT" ] || [ "$FPS_LIMIT" = 0 ] || hud_config="fps_limit=$FPS_LIMIT"
+[ -n "$HUD" ] || hud_config="${hud_config:+$hud_config,}no_display"
+if [ -n "$HUD" ] || [ "$hud_config" != no_display ]; then
+	export MANGOHUD=1
+	[ -z "$hud_config" ] || export MANGOHUD_CONFIG="$hud_config"
 fi
-[ -z "$HUD" ] || export MANGOHUD=1
 
 # Newer Turnip built next to the system Mesa (packaging/turnip), for Steam
 # and its games only.
@@ -75,9 +90,37 @@ export LD_LIBRARY_PATH="$RT${rtfiles:+:$rtfiles/lib/aarch64-linux-gnu:$rtfiles/l
 mkdir -p "$STEAMROOT/logs"
 cd "$STEAMROOT" || exit 1
 
-# Exit status 42 = "restart me" (after a client update).
+# "Switch to Desktop" / "Return to Gaming Mode" run steamos-session-select,
+# which on SteamOS changes the login session. Ours (next to this script, or
+# /usr/libexec/gts9wifi-steam-bin in the image) writes the wanted mode to
+# $switch and closes Steam; the loop below then starts the other mode.
+for d in /usr/libexec/gts9wifi-steam-bin "$STEAMROOT/gts9wifi-bin"; do
+	[ -x "$d/steamos-session-select" ] && { PATH="$d:$PATH"; break; }
+done
+switch="${XDG_RUNTIME_DIR:-/tmp}/gts9wifi-steam-switch"
+
+# gamescope: -w/-h is the size games see and draw at, -f fills the screen
+# (scaled), -e tells gamescope that Steam is the session inside it. Its
+# helper gamescopereaper is started by name, so its directory goes on PATH.
+gamescope=/usr/lib/gts9wifi-gamescope/bin/gamescope
+[ -x "$gamescope" ] && PATH="${gamescope%/*}:$PATH"
+
 while :; do
-	"$RT/steam" "${flags[@]}" "$@"
+	rm -f "$switch"
+	if [ -n "$deck" ] && [ -n "$RESOLUTION" ] && [ -x "$gamescope" ]; then
+		"$gamescope" -w "${RESOLUTION%x*}" -h "${RESOLUTION#*x}" -f -e -- \
+			"$RT/steam" -gamepadui "$@"
+	elif [ -n "$deck" ]; then
+		"$RT/steam" -gamepadui "$@"
+	else
+		"$RT/steam" "$@"
+	fi
 	rc=$?
+	if [ -f "$switch" ]; then
+		[ "$(cat "$switch")" = gamescope ] && deck=1 || deck=
+		set --              # a steam:// address was for the first start only
+		continue
+	fi
+	# Exit status 42 = "restart me" (after a client update).
 	[ "$rc" = 42 ] || exit "$rc"
 done

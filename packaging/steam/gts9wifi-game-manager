@@ -22,6 +22,9 @@ CONF = os.path.join(
 STEAMROOT = os.path.expanduser("~/.local/share/Steam")
 TURNIP_ICD = "/usr/lib/gts9wifi-turnip/share/vulkan/icd.d/freedreno_icd.aarch64.json"
 FPS_CHOICES = [0, 30, 40, 45, 60, 90, 120]
+GAMESCOPE = "/usr/lib/gts9wifi-gamescope/bin/gamescope"
+# 16:10 like the panel (2560x1600), so nothing is stretched.
+RES_CHOICES = ["", "1920x1200", "1680x1050", "1440x900", "1280x800"]
 # Flatpak id, name, what it plays. Shown when installed.
 EMULATORS = [
     ("org.libretro.RetroArch", "RetroArch", "Many classic consoles and arcade"),
@@ -124,7 +127,8 @@ class Window(Adw.ApplicationWindow):
 
         self.fps = Adw.ComboRow(
             title="Frame rate limit",
-            subtitle="Lower means less heat and longer battery life")
+            subtitle="Experimental: some games stop responding at start with a "
+                     "limit set here. Prefer the game's own limit")
         self.fps.set_model(Gtk.StringList.new(
             ["Unlimited" if v == 0 else f"{v} fps" for v in FPS_CHOICES]))
         try:
@@ -138,18 +142,25 @@ class Window(Adw.ApplicationWindow):
         have_hud = shutil.which("mangohud") is not None
         self.hud = Adw.SwitchRow(
             title="Performance overlay",
-            subtitle="Frame rate, CPU and GPU load in a corner of the game (MangoHud)"
-            if have_hud else "Needs the package mangohud")
+            subtitle="Experimental (MangoHud): some games stop responding at start "
+                     "with it on" if have_hud else "Needs the package mangohud")
         self.hud.set_sensitive(have_hud)
         self.hud.set_active(have_hud and self.conf.get("HUD") == "1")
         self.hud.connect("notify::active", self.on_switch, "HUD", False)
         perf.add(self.hud)
 
-        res = Adw.ActionRow(
-            title="Game resolution",
-            subtitle="Set in each game for now. One setting for all games needs "
-                     "gamescope, which is not in this image yet")
-        res.set_sensitive(False)
+        have_gs = os.access(GAMESCOPE, os.X_OK)
+        res = Adw.ComboRow(
+            title="Big Picture resolution",
+            subtitle="Steam in Big Picture and its games are drawn at this size and "
+                     "scaled to the screen (gamescope). Much less work for the "
+                     "graphics chip" if have_gs else "Needs gamescope, which is not installed")
+        res.set_model(Gtk.StringList.new(
+            ["Screen (2560x1600)" if not v else v.replace("x", " x ") for v in RES_CHOICES]))
+        current = self.conf.get("RESOLUTION", "")
+        res.set_selected(RES_CHOICES.index(current) if current in RES_CHOICES else 0)
+        res.set_sensitive(have_gs)
+        res.connect("notify::selected", self.on_resolution)
         perf.add(res)
 
         # --- while a game runs ---------------------------------------------
@@ -265,6 +276,14 @@ class Window(Adw.ApplicationWindow):
             self.conf["FPS_LIMIT"] = str(value)
         else:
             self.conf.pop("FPS_LIMIT", None)
+        self.save()
+
+    def on_resolution(self, row, _pspec):
+        value = RES_CHOICES[row.get_selected()]
+        if value:
+            self.conf["RESOLUTION"] = value
+        else:
+            self.conf.pop("RESOLUTION", None)
         self.save()
 
     def on_switch(self, row, _pspec, key, inverted):
