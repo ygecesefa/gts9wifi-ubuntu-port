@@ -1,0 +1,50 @@
+From 325b9e6f59c1af5813b259cda68ed72f70bf3a6e Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 01:00:39 +0300
+Subject: [PATCH] Controller: L2 + R2 + L3 + R3 toggles full screen
+
+During a stream on a touch screen without a keyboard the only way back to
+full screen was the stream menu. Pressing L2, R2, L3 and R3 together (on
+release, like the stream menu combo) now toggles it directly.
+---
+ gui/include/qmlcontroller.h |  1 +
+ gui/src/qmlcontroller.cpp   | 11 +++++++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/gui/include/qmlcontroller.h b/gui/include/qmlcontroller.h
+index e57043b8..c38c42db 100644
+--- a/gui/include/qmlcontroller.h
++++ b/gui/include/qmlcontroller.h
+@@ -32,6 +32,7 @@ private:
+     QObject *target = {};
+     uint32_t escape_shortcut = 0;
+     uint32_t old_buttons = 0;
++    bool fullscreen_combo_down = false;
+     Controller *controller = {};
+     QTimer *repeat_timer = {};
+     int repeat_running = 0;
+diff --git a/gui/src/qmlcontroller.cpp b/gui/src/qmlcontroller.cpp
+index 352c5d16..8573f965 100644
+--- a/gui/src/qmlcontroller.cpp
++++ b/gui/src/qmlcontroller.cpp
+@@ -70,6 +70,17 @@ QmlController::QmlController(Controller *c, uint32_t shortcut, QObject *t, QObje
+         if ((old_buttons & escape_shortcut) == escape_shortcut && (buttons & escape_shortcut) != escape_shortcut)
+             sendKey(Qt::Key_O, Qt::ControlModifier);
+ 
++        // L2 + R2 + L3 + R3: toggle full screen (QmlMainWindow::toggleFullscreen,
++        // the stream menu's Fullscreen switch). On a touch
++        // screen without a keyboard there was no way back to full screen
++        // during a stream. Acts on release, like the stream menu combo.
++        const uint32_t sticks = CHIAKI_CONTROLLER_BUTTON_L3 | CHIAKI_CONTROLLER_BUTTON_R3;
++        const bool fullscreen_combo = (buttons & sticks) == sticks
++            && state.l2_state > 200 && state.r2_state > 200;
++        if (fullscreen_combo_down && !fullscreen_combo && target)
++            QMetaObject::invokeMethod(target, "toggleFullscreen", Qt::QueuedConnection);
++        fullscreen_combo_down = fullscreen_combo;
++
+         old_buttons = buttons;
+     });
+ }
+-- 
+2.47.3
+

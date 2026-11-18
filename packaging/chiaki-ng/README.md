@@ -21,6 +21,7 @@ own manifest (pinned) with:
 
 | [0004](patches/0004-V4L2-M2M-take-the-decoder-s-pictures-as-dmabufs-DRM-P.patch) | **no copies of the picture**: asks the decoder for dmabuf frames and lets libplacebo import them into Vulkan (see "Zero copy" below). `CHIAKI_V4L2M2M_COPY=1` in the environment, or *zero copy* off in the settings, goes back to copies |
 | [0005](patches/0005-Stream-menu-Fullscreen-switch.patch) | **Fullscreen switch in the stream menu** (next to Zoom and Stretch). On the tablet there was no way back to full screen during a stream: F11 needs a keyboard, and a double tap goes to the controller's touchpad (only a real mouse double click toggles it). Open the stream menu with the controller's menu shortcut or Ctrl+O |
+| [0006](patches/0006-Controller-L2-R2-L3-R3-toggles-full-screen.patch) | **L2 + R2 + L3 + R3 on the controller toggles full screen** during a stream (on release, like the stream menu's L1 + R1 + L3 + R3). The buttons also reach the PlayStation, as with the menu combo |
 
 0002 needs `net.core.rmem_max` of at least 4 MiB (Ubuntu's default is
 208 KiB): `/etc/sysctl.d/90-gts9wifi-streaming.conf`.
