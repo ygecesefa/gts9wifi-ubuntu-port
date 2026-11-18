@@ -1,0 +1,12 @@
+// The Game Manager's "Tablet motion as controller gyro" switch starts and
+// stops gts9wifi-gyropad.service for the user at the screen, without a
+// password. Nothing else.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "gts9wifi-gyropad.service" &&
+        subject.local && subject.active) {
+        var verb = action.lookup("verb");
+        if (verb == "start" || verb == "stop" || verb == "restart")
+            return polkit.Result.YES;
+    }
+});

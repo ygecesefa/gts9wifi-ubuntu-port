@@ -71,7 +71,8 @@ chroot "$rootfs" apt-get -o APT::Sandbox::User=root update -qq
 chroot "$rootfs" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
 	libxcb-keysyms1 libavif16 libluajit-5.1-2 libseat1 libxres1 \
 	mangohud steam-devices joystick jstest-gtk solaar gvfs-backends gvfs-fuse \
-	python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libnotify-bin curl unzip xz-utils
+	python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libnotify-bin curl unzip xz-utils \
+	python3-evdev libqmi-glib5 libprotobuf-c1
 chroot "$rootfs" apt-get clean
 net_leave
 trap - EXIT
@@ -86,6 +87,18 @@ chroot "$rootfs" /usr/lib/gts9wifi-gamescope/bin/gamescope --version 2>&1 | grep
 if chroot "$rootfs" ldd /usr/lib/gts9wifi-turnip/lib/aarch64-linux-gnu/libvulkan_freedreno.so | grep -q 'not found'; then
 	echo "Turnip has unresolved libraries" >&2; exit 1
 fi
+
+# --- gyropad: controller + tablet motion sensors as one DualSense ------------
+gyropad_tar=${GYROPAD_TAR:-$(pick "$root/build/gyropad/out/gts9wifi-gyropad-*.tar.zst")}
+(cd "$(dirname "$gyropad_tar")" && sha256sum -c --quiet SHA256SUMS) || { echo "checksum: $gyropad_tar" >&2; exit 1; }
+echo "== GalaxyDeck: gyropad $(basename "$gyropad_tar")"
+rm -rf "$rootfs/usr/lib/gts9wifi-gyropad"
+tar -C "$rootfs" -xf "$gyropad_tar"
+gp=$repo/packaging/gyropad
+install -m 0755 "$gp/gts9wifi-gyropad" "$rootfs/usr/lib/gts9wifi-gyropad/bin/gts9wifi-gyropad"
+install -m 0644 "$gp/gts9wifi-gyropad.service" "$rootfs/usr/lib/systemd/system/gts9wifi-gyropad.service"
+install -D -m 0644 "$gp/50-gts9wifi-gyropad.rules" "$rootfs/etc/polkit-1/rules.d/50-gts9wifi-gyropad.rules"
+install -D -m 0644 "$gp/README.md" "$rootfs/usr/share/doc/gts9wifi/gyropad/README.md"
 
 # --- Steam launcher, Game Manager, session service ---------------------------
 echo "== GalaxyDeck: Steam launcher, Game Manager, session service"

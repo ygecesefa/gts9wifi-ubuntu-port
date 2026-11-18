@@ -1,0 +1,306 @@
+#!/usr/bin/python3
+# gts9wifi-gyropad: a controller clipped to the tablet + the tablet's own
+# gyroscope and accelerometer = one virtual DualSense.
+#
+#   gts9wifi-gyropad [--device /dev/input/eventN] [--rate HZ] [--axes MAP]
+#
+# Controllers like the Razer Kishi Ultra have no motion sensors, but they hold
+# the tablet: tilting the tablet is tilting the controller. This program
+#   - takes the controller's buttons and sticks (evdev; grabbed, so games
+#     do not see it twice),
+#   - reads the tablet's gyroscope and accelerometer (gts9wifi-imu, ~200 Hz),
+#   - and presents both as a USB DualSense through /dev/uhid. The kernel's
+#     hid-playstation driver and SDL's HIDAPI driver (Steam, chiaki-ng)
+#     then see a DualSense with motion sensors.
+# Rumble from the game (DualSense output report) goes to the controller's
+# force feedback when it has one.
+#
+# Report layout and calibration format: drivers/hid/hid-playstation.c
+# (struct dualsense_input_report, dualsense_get_calibration_data). The report
+# descriptor is a minimal one with the same report IDs and sizes, not a copy
+# of Sony's.
+#
+# --axes maps the tablet's sensor axes to the DualSense's (X right, Y up out
+# of the face, Z towards the player). Default "x,z,-y": the screen is the
+# controller's face, held landscape facing the player.
+# Needs root (/dev/uhid, grabbing the controller).
+
+import argparse
+import os
+import select
+import signal
+import struct
+import subprocess
+import sys
+import time
+
+import evdev
+from evdev import ecodes as E
+
+UHID_PATH = "/dev/uhid"
+IMU = "/usr/lib/gts9wifi-gyropad/bin/gts9wifi-imu"
+
+# uhid event types (linux/uhid.h)
+UHID_START, UHID_STOP, UHID_OPEN, UHID_CLOSE, UHID_OUTPUT = 2, 3, 4, 5, 6
+UHID_GET_REPORT, UHID_GET_REPORT_REPLY = 9, 10
+UHID_CREATE2, UHID_INPUT2 = 11, 12
+UHID_SET_REPORT, UHID_SET_REPORT_REPLY = 13, 14
+UHID_EVENT_SIZE = 4380
+BUS_USB = 0x03
+SONY, DUALSENSE = 0x054C, 0x0CE6
+
+# Minimal descriptor: gamepad collection, report 0x01 in (63 B), 0x02 out
+# (62 B), features 0x05 (40 B), 0x09 (19 B), 0x20 (63 B), vendor usages.
+RDESC = bytes([
+    0x05, 0x01, 0x09, 0x05, 0xA1, 0x01,
+    0x06, 0x00, 0xFF, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08,
+    0x85, 0x01, 0x09, 0x20, 0x95, 0x3F, 0x81, 0x02,
+    0x85, 0x02, 0x09, 0x21, 0x95, 0x3E, 0x91, 0x02,
+    0x85, 0x05, 0x09, 0x22, 0x95, 0x28, 0xB1, 0x02,
+    0x85, 0x09, 0x09, 0x23, 0x95, 0x13, 0xB1, 0x02,
+    0x85, 0x20, 0x09, 0x24, 0x95, 0x3F, 0xB1, 0x02,
+    0xC0,
+])
+
+# Calibration (report 0x05): bias 0, ±8847 raw = ±540 °/s, so raw = °/s
+# x 16.384 (a real DualSense's scale); accelerometer ±8192 raw = ±1 g.
+GYRO_LSB_PER_DPS = 8847 / 540.0
+ACC_LSB_PER_G = 8192.0
+CALIBRATION = struct.pack("<B" + "h" * 17 + "6x", 0x05,
+                          0, 0, 0,                     # pitch/yaw/roll bias
+                          8847, -8847, 8847, -8847, 8847, -8847,
+                          540, 540,                    # speed plus/minus
+                          8192, -8192, 8192, -8192, 8192, -8192)
+assert len(CALIBRATION) == 41
+PAIRING = bytes([0x09, 0x66, 0x55, 0x44, 0x33, 0x22, 0x02]) + bytes(13)   # MAC 02:22:33:44:55:66
+FIRMWARE = bytes([0x20]) + bytes(63)
+FEATURES = {0x05: CALIBRATION, 0x09: PAIRING, 0x20: FIRMWARE}
+
+# Controller buttons -> (byte index in buttons[], bit). Android-style pads:
+# BTN_A south, BTN_B east, BTN_X (=BTN_NORTH code) west, BTN_Y north.
+BUTTONS = {
+    E.BTN_X: (0, 4),       # square
+    E.BTN_A: (0, 5),       # cross
+    E.BTN_B: (0, 6),       # circle
+    E.BTN_Y: (0, 7),       # triangle
+    E.BTN_TL: (1, 0), E.BTN_TR: (1, 1),
+    E.BTN_TL2: (1, 2), E.BTN_TR2: (1, 3),
+    E.BTN_SELECT: (1, 4), E.BTN_START: (1, 5),
+    E.BTN_THUMBL: (1, 6), E.BTN_THUMBR: (1, 7),
+    E.BTN_MODE: (2, 0),
+}
+STICKS = {E.ABS_X: 0, E.ABS_Y: 1, E.ABS_Z: 2, E.ABS_RZ: 3}
+TRIGGERS = {E.ABS_BRAKE: 4, E.ABS_GAS: 5}
+HAT = {(0, -1): 0, (1, -1): 1, (1, 0): 2, (1, 1): 3, (0, 1): 4, (-1, 1): 5, (-1, 0): 6, (-1, -1): 7}
+
+
+def find_controller():
+    for path in evdev.list_devices():
+        d = evdev.InputDevice(path)
+        caps = d.capabilities()
+        keys, absc = caps.get(E.EV_KEY, []), caps.get(E.EV_ABS, [])
+        abs_codes = [a[0] if isinstance(a, tuple) else a for a in absc]
+        if E.BTN_A in keys and E.ABS_X in abs_codes and "DualSense" not in d.name \
+                and "gts9wifi" not in (d.phys or ""):
+            return d
+        d.close()
+    return None
+
+
+def parse_axes(spec):
+    out = []
+    for part in spec.split(","):
+        part = part.strip()
+        sign = -1 if part.startswith("-") else 1
+        out.append(("xyz".index(part.lstrip("+-")), sign))
+    assert len(out) == 3
+    return out
+
+
+class Pad:
+    def __init__(self, dev, axes):
+        self.dev = dev
+        self.axes = axes
+        self.state = bytearray(63)            # report without its ID
+        for i in range(4):
+            self.state[i] = 0x80              # sticks centred
+        self.state[7] = 0x08                  # d-pad released
+        self.hat = [0, 0]
+        self.seq = 0
+        self.gyro = (0.0, 0.0, 0.0)
+        self.accel = (0.0, 9.80665, 0.0)
+        self.t0 = time.monotonic()
+        self.info = {}
+        for code, ai in dev.capabilities(absinfo=True).get(E.EV_ABS, []):
+            self.info[code] = ai
+        self.state[52] = 0x0A                 # battery: full, discharging
+        self.ff_id = None
+        self.has_ff = E.EV_FF in dev.capabilities() and E.FF_RUMBLE in dev.capabilities().get(E.EV_FF, [])
+
+    def scale(self, code, value, centred):
+        ai = self.info.get(code)
+        if not ai or ai.max == ai.min:
+            return 0x80 if centred else 0
+        v = (value - ai.min) * 255 // (ai.max - ai.min)
+        return max(0, min(255, v))
+
+    def on_event(self, ev):
+        if ev.type == E.EV_KEY and ev.code in BUTTONS:
+            byte, bit = BUTTONS[ev.code]
+            idx = 7 + byte
+            if ev.value:
+                self.state[idx] |= 1 << bit
+            else:
+                self.state[idx] &= ~(1 << bit) & 0xFF
+            return True
+        if ev.type == E.EV_ABS:
+            if ev.code in STICKS:
+                self.state[STICKS[ev.code]] = self.scale(ev.code, ev.value, True)
+            elif ev.code in TRIGGERS:
+                self.state[TRIGGERS[ev.code]] = self.scale(ev.code, ev.value, False)
+                bit = 2 if ev.code == E.ABS_BRAKE else 3
+                if self.state[TRIGGERS[ev.code]] > 30:
+                    self.state[8] |= 1 << bit
+                else:
+                    self.state[8] &= ~(1 << bit) & 0xFF
+            elif ev.code in (E.ABS_HAT0X, E.ABS_HAT0Y):
+                self.hat[0 if ev.code == E.ABS_HAT0X else 1] = max(-1, min(1, ev.value))
+                self.state[7] = (self.state[7] & 0xF0) | HAT.get(tuple(self.hat), 8)
+            else:
+                return False
+            return True
+        return False
+
+    def map_axes(self, v):
+        return [v[i] * s for i, s in self.axes]
+
+    def report(self):
+        s = self.state
+        s[6] = self.seq & 0xFF
+        self.seq += 1
+        g = [int(x * 57.29578 * GYRO_LSB_PER_DPS) for x in self.map_axes(self.gyro)]
+        a = [int(x / 9.80665 * ACC_LSB_PER_G) for x in self.map_axes(self.accel)]
+        clamp = lambda x: max(-32768, min(32767, x))
+        struct.pack_into("<3h3hI", s, 15, *[clamp(x) for x in g + a],
+                         int((time.monotonic() - self.t0) * 3_000_000) & 0xFFFFFFFF)
+        for off in (32, 36):                  # no touch
+            s[off] = 0x80
+        return bytes([0x01]) + bytes(s)
+
+    def rumble(self, out):
+        # USB output report 0x02: [1] valid flags, [3] right (weak) motor,
+        # [4] left (strong) motor.
+        if not self.has_ff or len(out) < 5 or out[0] != 0x02:
+            return
+        weak, strong = out[3], out[4]
+        try:
+            if self.ff_id is not None:
+                self.dev.erase_effect(self.ff_id)
+                self.ff_id = None
+            if strong or weak:
+                eff = evdev.ff.Effect(E.FF_RUMBLE, -1, 0, evdev.ff.Trigger(0, 0),
+                                      evdev.ff.Replay(1000, 0),
+                                      evdev.ff.EffectType(ff_rumble_effect=evdev.ff.Rumble(
+                                          strong_magnitude=strong * 257, weak_magnitude=weak * 257)))
+                self.ff_id = self.dev.upload_effect(eff)
+                self.dev.write(E.EV_FF, self.ff_id, 1)
+        except OSError:
+            pass
+
+
+def uhid_create(fd, name):
+    ev = struct.pack("<I128s64s64sHHIIII", UHID_CREATE2, name.encode()[:127],
+                     b"gts9wifi-gyropad", b"02:22:33:44:55:66",
+                     len(RDESC), BUS_USB, SONY, DUALSENSE, 0x0100, 0)
+    ev += RDESC
+    os.write(fd, ev.ljust(UHID_EVENT_SIZE, b"\0"))
+
+
+def uhid_input(fd, data):
+    os.write(fd, struct.pack("<IH", UHID_INPUT2, len(data)) + data)
+
+
+def uhid_handle(fd, pad):
+    buf = os.read(fd, UHID_EVENT_SIZE)
+    (etype,) = struct.unpack_from("<I", buf, 0)
+    if etype == UHID_GET_REPORT:
+        rid, rnum, rtype = struct.unpack_from("<IBB", buf, 4)
+        data = FEATURES.get(rnum)
+        err = 0 if data else 5               # EIO for unknown reports
+        reply = struct.pack("<IIHH", UHID_GET_REPORT_REPLY, rid, err, len(data or b"")) + (data or b"")
+        os.write(fd, reply.ljust(UHID_EVENT_SIZE, b"\0"))
+    elif etype == UHID_SET_REPORT:
+        (rid,) = struct.unpack_from("<I", buf, 4)
+        os.write(fd, struct.pack("<IIH", UHID_SET_REPORT_REPLY, rid, 0).ljust(UHID_EVENT_SIZE, b"\0"))
+    elif etype == UHID_OUTPUT:
+        size, = struct.unpack_from("<H", buf, 4 + 4096)
+        pad.rumble(buf[4:4 + size])
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--device")
+    ap.add_argument("--rate", default="200")
+    ap.add_argument("--axes", default=os.environ.get("GTS9WIFI_GYROPAD_AXES", "x,z,-y"))
+    args = ap.parse_args()
+
+    # As a service: wait for a controller; when it goes away, exit and let
+    # systemd start us again (Restart=always).
+    dev = evdev.InputDevice(args.device) if args.device else None
+    while dev is None:
+        dev = find_controller()
+        if dev is None:
+            time.sleep(3)
+    pad = Pad(dev, parse_axes(args.axes))
+    print(f"gts9wifi-gyropad: {dev.name} ({dev.path}) + tablet motion -> DualSense, axes {args.axes}", flush=True)
+
+    imu = subprocess.Popen([IMU, args.rate], stdout=subprocess.PIPE, bufsize=0)
+    ufd = os.open(UHID_PATH, os.O_RDWR | os.O_CLOEXEC)
+    uhid_create(ufd, "Sony Interactive Entertainment DualSense Wireless Controller")
+    dev.grab()
+
+    def stop(*_):
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, stop)
+
+    imu_buf = b""
+    try:
+        while True:
+            r, _, _ = select.select([dev.fd, imu.stdout, ufd], [], [], 0.05)
+            send = False
+            if ufd in r:
+                uhid_handle(ufd, pad)
+            if dev.fd in r:
+                try:
+                    for ev in dev.read():
+                        send |= pad.on_event(ev)
+                except OSError:
+                    sys.exit("gts9wifi-gyropad: controller gone")
+            if imu.stdout in r:
+                chunk = os.read(imu.stdout.fileno(), 4096)
+                if not chunk:
+                    sys.exit("gts9wifi-gyropad: gts9wifi-imu stopped")
+                imu_buf += chunk
+                *lines, imu_buf = imu_buf.split(b"\n")
+                for line in lines:
+                    f = line.split()
+                    if len(f) == 5:
+                        v = (float(f[2]), float(f[3]), float(f[4]))
+                        if f[0] == b"G":
+                            pad.gyro = v
+                            send = True       # one report per gyro sample
+                        elif f[0] == b"A":
+                            pad.accel = v
+            if send or not r:
+                uhid_input(ufd, pad.report())
+    finally:
+        try:
+            dev.ungrab()
+        except OSError:
+            pass
+        imu.terminate()
+        os.write(ufd, struct.pack("<I", 1).ljust(UHID_EVENT_SIZE, b"\0"))   # UHID_DESTROY
+
+
+if __name__ == "__main__":
+    main()

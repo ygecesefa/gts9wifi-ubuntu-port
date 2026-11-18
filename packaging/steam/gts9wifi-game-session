@@ -284,6 +284,14 @@ def main():
     session = Session()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     conf, conf_mtime = read_conf(), None
+    # GYROPAD=1 (Game Manager): controller + tablet motion as one DualSense,
+    # a system service the user may start (polkit rule).
+    try:
+        with open(CONF) as f:
+            if "\nGYROPAD=1" in "\n" + f.read():
+                subprocess.run(["systemctl", "start", "gts9wifi-gyropad.service"], timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
     hot_since = None
     try:
         while follow is None or os.path.exists(f"/proc/{follow}"):

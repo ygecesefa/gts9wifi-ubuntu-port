@@ -1,0 +1,12 @@
+[Unit]
+Description=Controller + tablet motion sensors as one DualSense (gyro for games)
+Documentation=file:///usr/share/doc/gts9wifi/gyropad/README.md
+After=gts9wifi-adsp-boot.service
+
+[Service]
+ExecStart=/usr/lib/gts9wifi-gyropad/bin/gts9wifi-gyropad
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
