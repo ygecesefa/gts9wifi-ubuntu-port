@@ -54,6 +54,12 @@ mods['chiaki-ng']['sources'] += [{'type': 'patch', 'path': os.path.basename(p)} 
 # The current KDE SDK's CMake installs json-c and miniupnpc under /app/lib64
 # on aarch64, where chiaki-ng's pkg-config lookup does not search.
 mods['chiaki-ng'].setdefault('build-options', {})['prepend-pkg-config-path'] = '/app/lib64/pkgconfig'
+# gitlab.xiph.org was down (HTTP 502) on 2026-11-18; Xiph's own GitHub
+# mirrors carry the same tags and commits, which flatpak-builder checks.
+for mod in m['modules']:
+    for src in (mod.get('sources', []) if isinstance(mod, dict) else []):
+        if isinstance(src, dict) and str(src.get('url', '')).startswith('https://gitlab.xiph.org/xiph/'):
+            src['url'] = 'https://github.com/xiph/' + src['url'].split('/xiph/', 1)[1]
 yaml.safe_dump(m, open(path, 'w'), sort_keys=False)
 PY
 grep -n "v4l2\|\.patch" "$fh/$app.yaml"
