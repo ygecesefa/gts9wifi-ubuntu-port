@@ -1,0 +1,124 @@
+From b8514a8d101344fdd9c36643748ae57bd02b878f Mon Sep 17 00:00:00 2001
+From: ygecesefa <ygecesefa@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 00:35:30 +0300
+Subject: [PATCH 5/5] Stream menu: Fullscreen switch
+
+On a touch screen there was no way back to full screen during a stream:
+F11 needs a keyboard, and a double tap goes to the controller's touchpad
+(only a real mouse double click toggles it). The stream menu (opened with
+the controller's menu shortcut) gets a Fullscreen switch next to Zoom and
+Stretch.
+---
+ gui/include/qmlmainwindow.h |  4 ++++
+ gui/src/qml/StreamView.qml  | 17 +++++++++++++++--
+ gui/src/qmlmainwindow.cpp   | 16 ++++++++++++++++
+ 3 files changed, 35 insertions(+), 2 deletions(-)
+
+diff --git a/gui/include/qmlmainwindow.h b/gui/include/qmlmainwindow.h
+index 084f8fba..53ba229f 100644
+--- a/gui/include/qmlmainwindow.h
++++ b/gui/include/qmlmainwindow.h
+@@ -61,6 +61,7 @@ class QmlMainWindow : public QWindow
+     Q_PROPERTY(bool keepVideo READ keepVideo WRITE setKeepVideo NOTIFY keepVideoChanged)
+     Q_PROPERTY(bool loadingTransitionComplete READ loadingTransitionComplete NOTIFY loadingTransitionCompleteChanged)
+     Q_PROPERTY(VideoMode videoMode READ videoMode WRITE setVideoMode NOTIFY videoModeChanged)
++    Q_PROPERTY(bool fullscreen READ isFullscreen NOTIFY fullscreenChanged)
+     Q_PROPERTY(float ZoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY zoomFactorChanged)
+     Q_PROPERTY(VideoPreset videoPreset READ videoPreset WRITE setVideoPreset NOTIFY videoPresetChanged)
+     Q_PROPERTY(bool directStream READ directStream NOTIFY directStreamChanged)
+@@ -146,6 +147,8 @@ public:
+     VideoPreset videoPreset() const;
+     void setVideoPreset(VideoPreset mode);
+ 
++    Q_INVOKABLE void toggleFullscreen();
++    bool isFullscreen() const;
+     Q_INVOKABLE void grabInput();
+     Q_INVOKABLE void releaseInput();
+     Q_INVOKABLE void requestOverlayUpdate();
+@@ -174,6 +177,7 @@ signals:
+     void droppedFramesChanged();
+     void keepVideoChanged();
+     void videoModeChanged();
++    void fullscreenChanged();
+     void zoomFactorChanged();
+     void videoPresetChanged();
+     void menuRequested();
+diff --git a/gui/src/qml/StreamView.qml b/gui/src/qml/StreamView.qml
+index 7f8f5304..d01107fa 100644
+--- a/gui/src/qml/StreamView.qml
++++ b/gui/src/qml/StreamView.qml
+@@ -605,7 +605,6 @@ Item {
+ 
+             ToolButton {
+                 id: stretchButton
+-                Layout.rightMargin: 50
+                 text: qsTr("Stretch")
+                 padding: 10
+                 checkable: true
+@@ -617,6 +616,20 @@ Item {
+                     else
+                         zoomButton
+                 }
++                KeyNavigation.right: fullscreenButton
++                Keys.onReturnPressed: toggled()
++                Keys.onEscapePressed: menuController.close()
++            }
++
++            ToolButton {
++                id: fullscreenButton
++                Layout.rightMargin: 50
++                text: qsTr("Fullscreen")
++                padding: 10
++                checkable: true
++                checked: Chiaki.window.fullscreen
++                onToggled: Chiaki.window.toggleFullscreen()
++                KeyNavigation.left: stretchButton
+                 KeyNavigation.right: defaultButton
+                 Keys.onReturnPressed: toggled()
+                 Keys.onEscapePressed: menuController.close()
+@@ -632,7 +645,7 @@ Item {
+                     Chiaki.window.videoPreset = ChiakiWindow.VideoPreset.Default
+                     Chiaki.settings.videoPreset = ChiakiWindow.VideoPreset.Default
+                 }
+-                KeyNavigation.left: stretchButton
++                KeyNavigation.left: fullscreenButton
+                 KeyNavigation.right: highQualityButton
+                 Keys.onReturnPressed: toggled()
+                 Keys.onEscapePressed: menuController.close()
+diff --git a/gui/src/qmlmainwindow.cpp b/gui/src/qmlmainwindow.cpp
+index 8a2ca6dd..9aa073ca 100644
+--- a/gui/src/qmlmainwindow.cpp
++++ b/gui/src/qmlmainwindow.cpp
+@@ -4797,6 +4797,7 @@ void QmlMainWindow::doneOpenGLContextCurrent()
+ 
+ void QmlMainWindow::init(Settings *settings, bool exit_app_on_stream_exit)
+ {
++    connect(this, &QWindow::windowStateChanged, this, &QmlMainWindow::fullscreenChanged);
+     bypass_frame_queue = settings->GetDirectFrameMapping();
+     render_backend = settings->GetRenderBackend();
+     setSurfaceType(render_backend == RenderBackend::Vulkan ? QWindow::VulkanSurface : QWindow::OpenGLSurface);
+@@ -5328,6 +5329,21 @@ void QmlMainWindow::normalTime()
+     });
+ }
+ 
++void QmlMainWindow::toggleFullscreen()
++{
++    // The stream menu's Fullscreen switch: on a touch screen there is no F11
++    // and a double tap goes to the controller's touchpad.
++    if (windowState() != Qt::WindowFullScreen)
++        fullscreenTime();
++    else
++        normalTime();
++}
++
++bool QmlMainWindow::isFullscreen() const
++{
++    return windowState() == Qt::WindowFullScreen;
++}
++
+ void QmlMainWindow::fullscreenTime()
+ {
+     if(windowState() == Qt::WindowFullScreen)
+-- 
+2.47.3
+
